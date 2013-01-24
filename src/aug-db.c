@@ -2,14 +2,9 @@
 
 #include <strings.h>
 
+#include "api_calls.h"
+
 const char aug_plugin_name[] = "aug-db";
-
-const struct aug_api *g_api;
-struct aug_plugin *g_plugin;
-
-#define AUG_API_HANDLE g_api
-#define AUG_PLUGIN_HANDLE g_plugin
-#include "aug_api_macros.h"
 
 static void on_cmd_key(int ch, void *user);
 static void on_input(int *ch, aug_action *action, void *user);
@@ -23,13 +18,17 @@ struct aug_plugin_cb g_callbacks = {
 	.screen_dims_change = NULL
 };
 
+void aug_plugin_err_cleanup(int error) {
+	(void)(error);	
+}
+
 int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 	const char *key;
 	const char default_key[] = "^R";
 	int cmd_ch;
 
-	g_plugin = plugin;	
-	g_api = api;
+	G_plugin = plugin;	
+	G_api = api;
 
 	aug_log("init\n");
 
