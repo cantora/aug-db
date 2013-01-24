@@ -16,7 +16,7 @@
  */
 
 static struct {
-	pthread_t thread;
+	pthread_t id;
 	pthread_mutex_t mtx;
 	pthread_cond_t cond;
 	void (*cleanup)(int error);
@@ -39,12 +39,18 @@ int err_dispatch_init(void (*cleanup)(int error) ) {
 		pthread_mutex_destroy(&g.mtx);
 		return status;
 	}
-	if( (status = pthread_create(&g.thread, NULL, err_dispatch_run, NULL) ) != 0) {
+	if( (status = pthread_create(&g.id, NULL, err_dispatch_run, NULL) ) != 0) {
 		pthread_mutex_destroy(&g.mtx);
 		pthread_cond_destroy(&g.cond);
 		return status;
 	}
-	
+	if( (status = util_thread_init()) != 0){
+		pthread_cancel(g.id);
+		pthread_mutex_destroy(&g.mtx);
+		pthread_cond_destroy(&g.cond);
+		return status;
+	}
+
 	/* there is a race condition here: we want the dispatch
 	 * thread to be up and running before any other threads might
 	 * signal it. this module should get setup early on though, so
@@ -53,6 +59,11 @@ int err_dispatch_init(void (*cleanup)(int error) ) {
 	return 0;
 }
 
+/* err_dispatch should not be freed before all 
+ * other threads are dead (besides dispatch run
+ * thread), since one of those threads could 
+ * throw an error and try to lock the destroyed
+ * mutex by calling err_dispatch_signal */
 int err_dispatch_free() {
 	int status;
 
@@ -60,13 +71,16 @@ int err_dispatch_free() {
 		err_warn(status, "failed mutex lock while freeing dispatch");
 		return status;
 	}
-	if(g.ran != 0)
-		if( (status = pthread_cancel(g.thread) ) != 0 ) {
+	if(g.ran == 0)
+		if( (status = pthread_cancel(g.id) ) != 0 ) {
 			err_warn(status, "pthread cancel failed while freeing dispatch");
 			return status;
 		}
-
-	if( (status = pthread_join(g.thread, NULL)) != 0) {
+	if( (status = pthread_mutex_unlock(&g.mtx) != 0) ) {
+		err_warn(status, "failed mutex unlock while freeing dispatch");
+		return status;
+	}
+	if( (status = pthread_join(g.id, NULL)) != 0) {
 		err_warn(status, "pthread join failed while freeing dispatch");
 		return status;
 	}

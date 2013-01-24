@@ -19,8 +19,10 @@ void err_log(const char *file, int lineno,
 	if(result <= 0)
 		goto log_fail;
 
-	aug_log("(%s:%d) %s%s\n", file, lineno, buf, 
-		(error != 0)? strerror(error) : "");
+	aug_log("(%s:%d) %s%s%s\n", file, lineno, buf, 
+		(error != 0)? ": " : "",
+		(error != 0)? strerror(error) : ""
+	);
 
 	return;
 log_fail:

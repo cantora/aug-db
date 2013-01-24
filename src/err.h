@@ -30,6 +30,7 @@
 		err_log(__FILE__, __LINE__, _eno, __VA_ARGS__); \
 		if( (_err_struct_ptr)->err_cleanup != NULL ) \
 			(*(_err_struct_ptr)->err_cleanup)(_eno); \
+		err_dispatch_signal(_eno); \
 		pthread_exit((void *)1); \
 	} while(0)
 
