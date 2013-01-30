@@ -117,7 +117,7 @@ static void *err_dispatch_run(void *user) {
 	 * just after waking up from a signal. */
 	if( (status = pthread_cond_wait(&g.cond, &g.mtx)) != 0)
 		err_panic(status, "fatal: error in condition wait");
-	/* keep g.mtx locked so this thread wont get canceled by _free */
+	/* keep g.mtx locked so this thread wont get canceled by err_dispatch_free */
 	g.ran = 1;
 
 	/* call cleanup function */

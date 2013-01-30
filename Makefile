@@ -7,9 +7,9 @@ MKBUILD			:= $(shell mkdir -p $(BUILD) )
 CCAN_DIR		= ./libccan
 LIBCCAN			= $(CCAN_DIR)/libccan.a
 INCLUDES		= -iquote"$(AUG_DIR)/include" -I$(CCAN_DIR) -iquote"src"
-
+DEFINES			= -DAUG_DB_DEBUG
 OPTIMIZE		= -ggdb
-CXX_FLAGS		= -Wall -Wextra $(INCLUDES) $(OPTIMIZE)
+CXX_FLAGS		= -Wall -Wextra $(INCLUDES) $(OPTIMIZE) $(DEFINES)
 CXX_CMD			= gcc $(CXX_FLAGS)
 
 SRCS			= $(notdir $(wildcard ./src/*.c) )
