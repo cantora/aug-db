@@ -1,5 +1,8 @@
 #include "aug_plugin.h"
 
+#include "err.h"
+#include "ui.h"
+
 #include <strings.h>
 
 #include "api_calls.h"
@@ -19,12 +22,13 @@ struct aug_plugin_cb g_callbacks = {
 };
 
 static int g_cmd_ch;
+static int g_freed;
 
 void aug_plugin_err_cleanup(int error) {
 	(void)(error);
-	aug_log("fatal error. cleaning up...");
-	aug_plugin_free();
-	aug_log("plugin resources freed, call aug_unload()");
+	aug_log("fatal error. cleaning up...\n");
+	aug_log("call aug_unload()\n");
+	/* this will call aug_plugin_free */
 	aug_unload();
 }
 
@@ -37,8 +41,13 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 
 	aug_log("init\n");
 
+	g_freed = 0;
 	g_callbacks.user = NULL;
-	aug_callbacks(&g_callbacks, NULL);
+
+	if(err_dispatch_init(aug_plugin_err_cleanup) != 0) {
+		aug_log("failed to init err_dispatch\n");
+		return -1;
+	}
 
 	if( aug_conf_val(aug_plugin_name, "key", &key) == 0) {
 		aug_log("command key: %s\n", key);
@@ -61,6 +70,14 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 		return -1;
 	}
 	aug_log("bound to key character: 0x%02x\n", g_cmd_ch);
+
+	if(ui_init() != 0) {
+		aug_log("failed to initialize ui\n");
+		aug_key_unbind(g_cmd_ch);
+		return -1;
+	}
+
+	aug_callbacks(&g_callbacks, NULL);
 	
 	return 0;
 unlock_screen:
@@ -69,7 +86,18 @@ unlock_screen:
 }
 
 void aug_plugin_free() {
+	if(g_freed != 0)
+		err_panic(0, "aug-db was already freed!");
+
+	g_freed = 1;
+	aug_log("free\n");
 	aug_key_unbind(g_cmd_ch);
+#ifdef AUG_DB_DEBUG
+	if(ui_free() != 0)
+		err_panic(0, "failed to free ui");
+#else
+	ui_free();
+#endif
 }
 
 static void on_cmd_key(int ch, void *user) {
