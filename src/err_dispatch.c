@@ -20,6 +20,7 @@ static struct {
 	pthread_mutex_t mtx;
 	pthread_cond_t cond;
 	void (*cleanup)(int error);
+	int ready;
 	int ran;
 	int error;
 } g;
@@ -31,32 +32,34 @@ int err_dispatch_init(void (*cleanup)(int error) ) {
 
 	g.cleanup = cleanup;
 	g.ran = 0;
+	g.ready = 0;
 	g.error = 0;
 
 	if( (status = pthread_mutex_init(&g.mtx, NULL) ) != 0)
 		return status;
-	if( (status = pthread_cond_init(&g.cond, NULL) ) != 0) {
-		pthread_mutex_destroy(&g.mtx);
-		return status;
-	}
-	if( (status = pthread_create(&g.id, NULL, err_dispatch_run, NULL) ) != 0) {
-		pthread_mutex_destroy(&g.mtx);
-		pthread_cond_destroy(&g.cond);
-		return status;
-	}
-	if( (status = util_thread_init()) != 0){
+	if( (status = pthread_cond_init(&g.cond, NULL) ) != 0)
+		goto cleanup_mtx;
+	if( (status = pthread_create(&g.id, NULL, err_dispatch_run, NULL) ) != 0)
+		goto cleanup_cond;
+	if( (status = util_thread_init()) != 0) {
 		pthread_cancel(g.id);
-		pthread_mutex_destroy(&g.mtx);
-		pthread_cond_destroy(&g.cond);
-		return status;
+		goto cleanup_cond;
 	}
 
-	/* there is a race condition here: we want the dispatch
+	/* we want the dispatch
 	 * thread to be up and running before any other threads might
-	 * signal it. this module should get setup early on though, so
-	 * im content just to sleep a bit */
-	util_usleep(0, 100000);
+	 * signal it. */
+	while(g.ready == 0)
+		util_usleep(0, 10000);
+
 	return 0;
+
+cleanup_cond:
+	pthread_cond_destroy(&g.cond);
+cleanup_mtx:
+	pthread_mutex_destroy(&g.mtx);
+
+	return status;
 }
 
 /* err_dispatch should not be freed before all 
@@ -113,6 +116,7 @@ static void *err_dispatch_run(void *user) {
 	if( (status = pthread_mutex_lock(&g.mtx)) != 0)
 		err_panic(status, "fatal: err_dispatch thread failed to lock");
 
+	g.ready = 1;
 	/* unlocks g.mtx after starting to wait. relocks g.mtx
 	 * just after waking up from a signal. */
 	if( (status = pthread_cond_wait(&g.cond, &g.mtx)) != 0)
