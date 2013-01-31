@@ -100,9 +100,21 @@ void aug_plugin_free() {
 #endif
 }
 
+/* cannot call aug_unload in a callback, so we have to 
+ * signall the err_dispatch module
+ */
+#define ERR_IN_CB(...) \
+	do { \
+		aug_log(__VA_ARGS__); \
+		err_dispatch_signal(0); \
+	} while(0)
+
 static void on_cmd_key(int ch, void *user) {
 	(void)(ch);
 	(void)(user);
+
+	if(ui_on_cmd_key() != 0)
+		ERR_IN_CB("error in ui_on_cmd_key. unload...\n");
 }
 
 static void on_input(int *ch, aug_action *action, void *user) {

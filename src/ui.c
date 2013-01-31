@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <pthread.h>
+#include <errno.h>
 
 /* this module represents the user interface thread and the functions
  * that other threads can call to interface with the 
@@ -22,6 +23,9 @@ static struct {
 	int ready;
 	int error;
 	ERR_MEMBERS;
+	struct {
+		int key;
+	} signals;
 } g;
 
 static struct {
@@ -34,15 +38,13 @@ static void *ui_t_run(void *);
  * be called later
  */
 static void ui_err_cleanup(int error) {
-	int status;
 	(void)(error);
 
 	g.error = 1;
 	/* cant call ui_t_unlock here or things could
 	 * get recursive */
 	if(t_g.mtx_locked != 0)
-		if( (status = pthread_mutex_unlock(&g.mtx)) != 0)
-			err_panic(status, "fatal: cant unlock mutex, thread lock would be imminent");
+		pthread_mutex_unlock(&g.mtx);
 }
 
 int ui_init() {
@@ -52,6 +54,7 @@ int ui_init() {
 	g.shutdown = 0;
 	g.error = 0;
 	g.ready = 0;
+	g.signals.key = 0;
 	if(pthread_mutex_init(&g.mtx, NULL) != 0)
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
@@ -74,7 +77,6 @@ cleanup_mtx:
 
 /* this should not be called by ui thread */
 int ui_free() {
-	int s;
 	aug_log("ui free\n");
 	if(g.error == 0) {
 		aug_log("kill ui thread\n");
@@ -90,10 +92,8 @@ int ui_free() {
 	}
 
 	aug_log("join ui thread\n");
-	if( (s = pthread_join(g.tid, NULL)) != 0) {
-		aug_log("join error: %d\n", s);
+	if( pthread_join(g.tid, NULL) != 0)
 		return -1;
-	}
 
 	aug_log("ui thread dead\n");
 #ifdef AUG_DB_DEBUG
@@ -119,6 +119,19 @@ int ui_unlock() {
 	return pthread_mutex_unlock(&g.mtx);
 }
 
+int ui_on_cmd_key() { 
+	int status;
+
+	aug_log("ui: on_cmd_key\n");
+	if( (status = ui_lock()) != 0)
+		return status;
+	g.signals.key += 1;
+	if( (status = ui_unlock()) != 0)
+		return status;
+
+	return 0;
+}
+
 static void ui_t_lock() {
 	int status;
 
@@ -139,15 +152,19 @@ static void ui_t_unlock() {
 
 static void *ui_t_run(void *user) {
 	int status;
+	struct timespec ts;
 	(void)(user);
 
 	t_g.mtx_locked = 0;
-
-	ui_t_lock(); 
+	ui_t_lock(); /* what if this fails? aug_unload before init finishes? */
 	g.ready = 1;
 
 	while(1) {
-		if( (status = pthread_cond_wait(&g.wakeup, &g.mtx)) != 0)
+		if( (status = clock_gettime(CLOCK_REALTIME, &ts)) != 0)
+			err_die(&g, status, "failed to set timespec");
+		ts.tv_sec += 1;
+		status = pthread_cond_timedwait(&g.wakeup, &g.mtx, &ts);
+		if(status != 0 && status != ETIMEDOUT)
 			err_die(&g, status, "error in condition wait");
 
 		if(g.shutdown != 0) {

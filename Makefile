@@ -7,6 +7,7 @@ MKBUILD			:= $(shell mkdir -p $(BUILD) )
 CCAN_DIR		= ./libccan
 LIBCCAN			= $(CCAN_DIR)/libccan.a
 INCLUDES		= -iquote"$(AUG_DIR)/include" -I$(CCAN_DIR) -iquote"src"
+LIB				= -lrt
 DEFINES			= -DAUG_DB_DEBUG
 OPTIMIZE		= -ggdb
 CXX_FLAGS		= -Wall -Wextra $(INCLUDES) $(OPTIMIZE) $(DEFINES)
@@ -26,7 +27,7 @@ default: all
 all: $(OUTPUT) 
 
 $(OUTPUT): $(OBJECTS)
-	$(CXX_CMD) -shared $+ -o $@
+	$(CXX_CMD) -shared $+ $(LIB) -o $@
 
 $(BUILD)/%.o: src/%.c
 	$(CXX_CMD) $(DEP_FLAGS) -fPIC -c $< -o $@

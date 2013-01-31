@@ -23,6 +23,7 @@ static struct {
 	int ready;
 	int ran;
 	int error;
+	int signal;
 } g;
 
 static void *err_dispatch_run(void *);
@@ -34,6 +35,7 @@ int err_dispatch_init(void (*cleanup)(int error) ) {
 	g.ran = 0;
 	g.ready = 0;
 	g.error = 0;
+	g.signal = 0;
 
 	if( (status = pthread_mutex_init(&g.mtx, NULL) ) != 0)
 		return status;
@@ -101,6 +103,10 @@ void err_dispatch_signal(int error) {
 		err_panic(status, "failed mutex lock while signaling dispatch");
 
 	g.error = error;
+	/* simply waking up from cond_wait does not imply
+	 * that it was actually signalled, thus we must
+	 * make that explicit here. */
+	g.signal = 1; 
 	if( (status = pthread_cond_signal(&g.cond)) != 0) 
 		err_panic(status, "failed to signal dispatch");
 
@@ -117,10 +123,12 @@ static void *err_dispatch_run(void *user) {
 		err_panic(status, "fatal: err_dispatch thread failed to lock");
 
 	g.ready = 1;
-	/* unlocks g.mtx after starting to wait. relocks g.mtx
-	 * just after waking up from a signal. */
-	if( (status = pthread_cond_wait(&g.cond, &g.mtx)) != 0)
-		err_panic(status, "fatal: error in condition wait");
+	while(g.signal == 0) {
+		/* unlocks g.mtx after starting to wait. relocks g.mtx
+		 * just after waking up from a signal. */
+		if( (status = pthread_cond_wait(&g.cond, &g.mtx)) != 0)
+			err_panic(status, "fatal: error in condition wait");
+	}
 	/* keep g.mtx locked so this thread wont get canceled by err_dispatch_free */
 	g.ran = 1;
 
