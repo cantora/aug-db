@@ -9,16 +9,18 @@
 
 const char aug_plugin_name[] = "aug-db";
 
-static void on_cmd_key(int ch, void *user);
-static void on_input(int *ch, aug_action *action, void *user);
+static void on_cmd_key(int, void *);
+static void on_input(int *, aug_action *, void *);
+static void on_dims_change(int, int, void *);
+
 /* requires screen lock b.c. curses calls are invoked */
-static int char_rep_to_char(const char *str, int *ch);
+static int char_rep_to_char(const char *, int *);
 
 struct aug_plugin_cb g_callbacks = {
 	.input_char = on_input,
 	.cell_update = NULL,
 	.cursor_move = NULL,
-	.screen_dims_change = NULL
+	.screen_dims_change = on_dims_change
 };
 
 static int g_cmd_ch;
@@ -44,6 +46,9 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 	g_freed = 0;
 	g_callbacks.user = NULL;
 
+	if(err_init() != 0)
+		return -1;
+
 	if(err_dispatch_init(aug_plugin_err_cleanup) != 0) {
 		aug_log("failed to init err_dispatch\n");
 		return -1;
@@ -57,12 +62,12 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 		aug_log("no command key configured, using default: %s\n", key);
 	}	
 
-	aug_lock_screen(); {
-		if( char_rep_to_char(key, &g_cmd_ch) != 0 ) {
-			aug_log("failed to map character key to %s\n", key);
-			goto unlock_screen;
-		}
-	} aug_unlock_screen();
+	aug_lock_screen();
+	if( char_rep_to_char(key, &g_cmd_ch) != 0 ) {
+		aug_log("failed to map character key to %s\n", key);
+		goto unlock_screen;
+	}
+	aug_unlock_screen();
 
 	/* register callback for when the user wants to activate aug-db features */
 	if( aug_key_bind(g_cmd_ch, on_cmd_key, NULL) != 0) {
@@ -98,6 +103,7 @@ void aug_plugin_free() {
 #else
 	ui_free();
 #endif
+	err_free();
 }
 
 /* cannot call aug_unload in a callback, so we have to 
@@ -121,6 +127,12 @@ static void on_input(int *ch, aug_action *action, void *user) {
 	(void)(ch);
 	(void)(action);
 	(void)(user);
+}
+
+static void on_dims_change(int rows, int cols, void *user) {
+	(void)(user);
+	(void)(rows);
+	(void)(cols);
 }
 
 static int char_rep_to_char(const char *str, int *ch) {

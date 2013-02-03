@@ -44,20 +44,14 @@ void test2_cleanup(int error) {
 
 void test2() {
 	int passed = 0;
-	struct {
-		ERR_MEMBERS;
-	} data;
 
 	diag("++++test2++++");	
-	err_init(&data);
-	ok1(data.err_cleanup == NULL);
-	
-	err_set_cleanup_fn(&data, test2_cleanup);
-
+	ok1(err_init() == 0);
+	err_set_cleanup_fn(test2_cleanup);
 	ok1(err_dispatch_init(test2_err_dispatch_cleanup) == 0);
 
 #define pthread_exit(status) passed = 1
-	err_die(&data, 15, "test err_die");
+	err_die(15, "test err_die");
 #undef pthread_exit
 	ok1(passed == 1);
 	util_usleep(10,0);
@@ -66,7 +60,8 @@ void test2() {
 	ok1(g_test2_err_dispatch_cleanup_ran == 1);
 
 	ok1(err_dispatch_free() == 0);
-#define TEST2AMT 1 + 1 + 3 + 2 + 1
+	ok1(err_free() == 0);
+#define TEST2AMT 1 + 1 + 3 + 2 + 2
 	diag("----test2----\n#");
 }
 

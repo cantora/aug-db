@@ -11,28 +11,9 @@
  * err_die macro will log the error message, invoke the
  * configured cleanup function, then signal the err_dispatch handler 
  */
-#define ERR_MEMBERS \
-	void (*err_cleanup)(int error);
-
-#define err_init(_err_struct_ptr) \
-	do { \
-		(_err_struct_ptr)->err_cleanup = NULL; \
-	} while(0)
-
-#define err_set_cleanup_fn(_err_struct_ptr, _cleanup_fn) \
-	(_err_struct_ptr)->err_cleanup = _cleanup_fn
 
 #define err_warn(_eno, ...) \
 	err_log(__FILE__, __LINE__, _eno, __VA_ARGS__)
-
-#define err_die(_err_struct_ptr, _eno, ...) \
-	do { \
-		err_log(__FILE__, __LINE__, _eno, __VA_ARGS__); \
-		if( (_err_struct_ptr)->err_cleanup != NULL ) \
-			(*(_err_struct_ptr)->err_cleanup)(_eno); \
-		err_dispatch_signal(_eno); \
-		pthread_exit((void *)1); \
-	} while(0)
 
 #define err_panic(_eno, ...) \
 	do { \
@@ -40,6 +21,21 @@
 		exit(1); \
 	} while(0)
 
+#define err_die(_eno, ...) \
+	do { \
+		err_log(__FILE__, __LINE__, _eno, __VA_ARGS__); \
+		err_call_cleanup_fn(_eno); \
+		err_dispatch_signal(_eno); \
+		pthread_exit((void *)1); \
+	} while(0)
+
+/* these should be called by the main thread */
+int err_init();
+int err_free();
+
+/* meant for non-primary threads */
+void err_set_cleanup_fn(void (*cleanup_fn)(int error) );
+void err_call_cleanup_fn(int error);
 void err_log(const char *file, int lineno, 
 					int error, const char *format, ...);
 
