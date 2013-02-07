@@ -106,7 +106,7 @@ void test3() {
 	struct fifo p1;
 	int buf1[128];
 	int elem;
-	int output_buf[16];
+	int output_buf[128];
 	int test_arr[512];
 	size_t i;
 
@@ -123,8 +123,20 @@ void test3() {
 	fifo_write(&p1, test_arr, 128);
 	ok1(fifo_amt(&p1) == 128);
 	ok1(fifo_avail(&p1) == 0);
-
-#define TEST3AMT 2 + 2
+	fifo_peek(&p1, output_buf, 128);
+	ok1(memcmp(output_buf, test_arr, 128) == 0);
+	
+	for(i = 0; i < 128; i++) {
+		fifo_pop(&p1, &elem);
+		ok1(elem == test_arr[i] && fifo_amt(&p1) == 127 \
+				&& fifo_avail(&p1) == 1);
+		fifo_push(&p1, test_arr+128+i);
+		ok1(fifo_amt(&p1) == 128 && fifo_avail(&p1) == 0);
+		fifo_peek(&p1, output_buf, 128);
+		ok1(memcmp(output_buf, test_arr+i, 128));
+	}
+	
+#define TEST3AMT 2 + 3 + 128*3
 	diag("----test3----\n#");
 }
 
