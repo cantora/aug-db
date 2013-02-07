@@ -7,8 +7,8 @@ struct fifo {
 	void *buf;
 	size_t n;
 	size_t size;	
-	size_t write;
-	size_t read;
+	size_t read; 
+	size_t data_len;
 };
 
 void fifo_init(struct fifo *f, void *buf, 
@@ -17,15 +17,15 @@ void fifo_init(struct fifo *f, void *buf,
 size_t fifo_amt(const struct fifo *f);
 size_t fifo_avail(const struct fifo *f);
 
-size_t fifo_peek(const struct fifo *f, void *dest, size_t n);
+void fifo_peek(const struct fifo *f, void *dest, size_t n);
 #define fifo_top(_f_ptr, _dest) \
 	fifo_peek(_f_ptr, _dest, 1)
 
-size_t fifo_consume(struct fifo *f, void *dest, size_t n);
+void fifo_consume(struct fifo *f, void *dest, size_t n);
 #define fifo_pop(_f_ptr, _dest) \
 	fifo_consume(_f_ptr, _dest, 1)
 
-size_t fifo_write(struct fifo *f, const void *src, size_t n);
+void fifo_write(struct fifo *f, const void *src, size_t n);
 #define fifo_push(_f_ptr, _src) \
 	fifo_write(_f_ptr, _src, 1)
 	

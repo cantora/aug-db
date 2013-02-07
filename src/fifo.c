@@ -8,21 +8,16 @@ void fifo_init(struct fifo *f, void *buf,
 	f->buf = buf;
 	f->n = n_elem;
 	f->size = elem_size;
-	f->write = 0;
+	f->data_len = 0;
 	f->read = 0;
 }
 
 /* the amount of unconsumed data */
 size_t fifo_amt(const struct fifo *f) {
-	int amt;
-	amt = f->write - f->read;
-	if(amt < 0)
-		amt += f->n;
-	
-	if(amt < 0)
-		err_panic(0, "didnt expect amt < 0");
-	
-	return (size_t) amt;
+	if(f->data_len > f->n)
+		err_panic(0, "didnt expect data_len to exceed n");
+
+	return f->data_len;
 }
 
 size_t fifo_avail(const struct fifo *f) {
@@ -33,43 +28,27 @@ size_t fifo_avail(const struct fifo *f) {
 	( (_fifo)->buf + (_fifo)->read*(_fifo)->size )
 
 #define FIFO_WRITE_ADDR(_fifo) \
-	( (_fifo)->buf + (_fifo)->write*(_fifo)->size )
+	( (_fifo)->buf + ( ((_fifo)->read+(_fifo)->data_len)%(_fifo)->n )*(_fifo)->size )
 
-
-size_t fifo_peek(const struct fifo *f, void *dest, size_t n) {
-	size_t amt;
-
-	amt = fifo_amt(f);
-	n = (n > amt || n < 1)? amt : n;
-	if(n < 1)
-		return 0;
-
+/* n must be less than or equal to fifo_amt(f). 
+ */
+void fifo_peek(const struct fifo *f, void *dest, size_t n) {
 	memcpy(dest, FIFO_READ_ADDR(f), n*f->size);
-
-	return n;
 }
 
-size_t fifo_consume(struct fifo *f, void *dest, size_t n) {
-	size_t amt;
-
-	amt = fifo_peek(f, dest, n);
-	if(amt > 0)
-		f->read = (f->read + amt) % f->n;
-
-	return amt;
+/* n must be less than or equal to fifo_amt(f). 
+ */
+void fifo_consume(struct fifo *f, void *dest, size_t n) {
+	fifo_peek(f, dest, n);
+	f->read = (f->read + n) % f->n;
+	f->data_len -= n;
 }
 
-size_t fifo_write(struct fifo *f, const void *src, size_t n) {
-	size_t amt;
-
-	amt = fifo_avail(f);
-	n = (n > amt || n < 1)? amt : n;
-	if(n < 1)
-		return 0;
-
+/* n must be less than or equal to 
+ * fifo_avail(f).
+ */
+void fifo_write(struct fifo *f, const void *src, size_t n) {
 	memcpy(FIFO_WRITE_ADDR(f), src, n*f->size);
-	f->write = (f->write + n) % f->n;
-	
-	return n;
+	f->data_len += n;
 }
 
