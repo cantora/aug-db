@@ -126,7 +126,9 @@ static void on_cmd_key(int ch, void *user) {
 static void on_input(int *ch, aug_action *action, void *user) {
 	(void)(action);
 	(void)(user);
-	ui_on_input(ch);
+
+	if(ui_on_input(ch) != 0)
+		ERR_IN_CB("error in ui_on_input. unload...");
 }
 
 static void on_dims_change(int rows, int cols, void *user) {

@@ -24,6 +24,7 @@ static struct {
 	int waiting;
 	int error;
 	int sig_cmd_key;
+	int on;
 	int input_buf[1024];
 	struct fifo input_pipe;
 	pthread_mutex_t pipe_mtx;
@@ -40,6 +41,13 @@ static void ui_err_cleanup(int error) {
 	g.error = 1;
 }
 
+static void set_sig_cmd_key() {
+	g.sig_cmd_key = 1;
+}
+static void clr_sig_cmd_key() {
+	g.sig_cmd_key = 0;
+}
+
 #define ERR_DIE(...) \
 	err_die(__VA_ARGS__)
 
@@ -54,6 +62,7 @@ int ui_init() {
 	g.error = 0;
 	g.waiting = 0;
 	g.sig_cmd_key = 0;
+	g.on = 0;
 	if(pthread_mutex_init(&g.mtx, NULL) != 0)
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
@@ -89,6 +98,7 @@ int ui_free() {
 			return -1;
 		g.shutdown = 1;
 		if(g.waiting != 0)
+			aug_log("signal ui thread\n");
 			if(pthread_cond_signal(&g.wakeup) != 0) {
 				ui_unlock();
 				return -1;
@@ -129,37 +139,58 @@ int ui_unlock() {
 	return pthread_mutex_unlock(&g.mtx);
 }
 
-int ui_on_cmd_key() { 
+static int wakeup_ui_thread(void (*callback)()) {
 	int status;
 
-	aug_log("ui: on_cmd_key\n");
 	if( (status = ui_lock()) != 0)
 		return status;
+	
 	if(g.waiting != 0) {
 		g.waiting = 0;
-		if( (status = pthread_cond_signal(&g.wakeup)) != 0) {
-			ui_unlock();
-			return status;
-		}
+		if(callback != NULL)
+			(*callback)();
+		if( (status = pthread_cond_signal(&g.wakeup)) != 0) 
+			goto unlock;
 	}
-	else
-		g.sig_cmd_key = 1;
-		
+	else {
+		aug_log("expected ui thread to be waiting\n");
+		status = -1;
+		goto unlock;
+	}
+
 	if( (status = ui_unlock()) != 0)
 		return status;
 
 	return 0;
+unlock:
+	ui_unlock();
+	return status;
+}
+
+int ui_on_cmd_key() { 
+	aug_log("ui: on_cmd_key\n");
+	if(wakeup_ui_thread(set_sig_cmd_key) != 0)
+		return -1;
+	
+	return 0;
 }
 
 int ui_on_input(const int *ch) {
+	if(g.on == 0)
+		return 0;
+
 	if( (pthread_mutex_lock(&g.pipe_mtx)) != 0) {
 		return -1;
 	}
 	
+	aug_log("ui_on_input\n");
 	if(fifo_avail(&g.input_pipe) < 1)
 		goto unlock;
 	fifo_push(&g.input_pipe, ch);
 
+	if(wakeup_ui_thread(NULL) != 0) 
+		goto unlock;
+	
 	if( (pthread_mutex_unlock(&g.pipe_mtx)) != 0) {
 		return -1;
 	}			
@@ -194,38 +225,45 @@ static void interact() {
 
 	aug_log("interact: begin\n");
 	window_start();
+	g.on = 1;
 	
 	while(1) {
 		g.waiting = 1;
 		status = pthread_cond_wait(&g.wakeup, &g.mtx);
 		if(status != 0)
 			ERR_UNLOCK_DIE(status, "error in condition wait");
-
-		if(g.shutdown != 0) {
+	
+		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
+			clr_sig_cmd_key();
 			/* leave mtx locked */
 			break;
 		}
 		else if(g.waiting == 0) {
 			if( (key_amt = fifo_amt(&g.input_pipe)) > 0) {
+				aug_log("consume %d chars of input\n", key_amt);
+				aug_lock_screen();
 				if(window_ncwin(&win) != 0) {
-					window_end();				
-					err_die(0, "expected to be able to get window from panel");
+					aug_unlock_screen();
+					window_end();
+					ERR_UNLOCK_DIE(0, "expected to be able to get window from panel");
 				}
 
-				mvwprintw(win, 1, 1, "typed keys: ");
 				for(i = 0; i < key_amt; i++) {
 					fifo_pop(&g.input_pipe, &ch);
 					waddch(win, ch);
 				}
+				aug_screen_panel_update();
+				aug_screen_doupdate();
+
+				aug_unlock_screen();
 			}
 		}
 		/* else "spurious wakeup", do nothing */
 	}
 
 	window_end();
+	g.on = 0;
 	aug_log("interact: end\n");
-
-
 }
 
 static void *ui_t_run(void *user) {
@@ -242,6 +280,7 @@ static void *ui_t_run(void *user) {
 		if(status != 0)
 			ERR_UNLOCK_DIE(status, "error in condition wait");
 
+		clr_sig_cmd_key();
 		if(g.shutdown != 0) {
 			ui_t_unlock();
 			break;
