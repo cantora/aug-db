@@ -67,3 +67,9 @@ void window_end() {
 	window_unlock();
 }
 
+int window_ncwin(WINDOW **win) {
+	if( (*win = panel_window(g.panel)) == NULL)
+		return -1;
+
+	return 0;
+}

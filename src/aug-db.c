@@ -124,9 +124,9 @@ static void on_cmd_key(int ch, void *user) {
 }
 
 static void on_input(int *ch, aug_action *action, void *user) {
-	(void)(ch);
 	(void)(action);
 	(void)(user);
+	ui_on_input(ch);
 }
 
 static void on_dims_change(int rows, int cols, void *user) {

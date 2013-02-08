@@ -4,9 +4,11 @@
 #include "err.h"
 #include "util.h"
 #include "window.h"
+#include "fifo.h"
 
 #include <pthread.h>
 #include <errno.h>
+#include <ccan/array_size/array_size.h>
 
 /* this module represents the user interface thread and the functions
  * that other threads can call to interface with the 
@@ -22,6 +24,9 @@ static struct {
 	int waiting;
 	int error;
 	int sig_cmd_key;
+	int input_buf[1024];
+	struct fifo input_pipe;
+	pthread_mutex_t pipe_mtx;
 } g;
 
 static void *ui_t_run(void *);
@@ -55,6 +60,8 @@ int ui_init() {
 		goto cleanup_mtx;
 	if(window_init() != 0)
 		goto cleanup_cond;
+
+	fifo_init(&g.input_pipe, g.input_buf, sizeof(int), ARRAY_SIZE(g.input_buf));
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
@@ -144,6 +151,25 @@ int ui_on_cmd_key() {
 	return 0;
 }
 
+int ui_on_input(const int *ch) {
+	if( (pthread_mutex_lock(&g.pipe_mtx)) != 0) {
+		return -1;
+	}
+	
+	if(fifo_avail(&g.input_pipe) < 1)
+		goto unlock;
+	fifo_push(&g.input_pipe, ch);
+
+	if( (pthread_mutex_unlock(&g.pipe_mtx)) != 0) {
+		return -1;
+	}			
+
+	return 0;
+unlock:
+	pthread_mutex_unlock(&g.pipe_mtx);
+	return -1;
+}
+
 static void ui_t_lock() {
 	int status;
 
@@ -158,12 +184,48 @@ static void ui_t_unlock() {
 		ERR_DIE(status, "the ui thread encountered error while trying to unlock");
 }
 
+/* mtx is locked upon entry to this function.
+ * this function should return with mtx locked.
+ */
 static void interact() {
+	int status, ch;
+	size_t key_amt, i;
+	WINDOW *win;
+
 	aug_log("interact: begin\n");
 	window_start();
-	util_usleep(1, 0);
+	
+	while(1) {
+		g.waiting = 1;
+		status = pthread_cond_wait(&g.wakeup, &g.mtx);
+		if(status != 0)
+			ERR_UNLOCK_DIE(status, "error in condition wait");
+
+		if(g.shutdown != 0) {
+			/* leave mtx locked */
+			break;
+		}
+		else if(g.waiting == 0) {
+			if( (key_amt = fifo_amt(&g.input_pipe)) > 0) {
+				if(window_ncwin(&win) != 0) {
+					window_end();				
+					err_die(0, "expected to be able to get window from panel");
+				}
+
+				mvwprintw(win, 1, 1, "typed keys: ");
+				for(i = 0; i < key_amt; i++) {
+					fifo_pop(&g.input_pipe, &ch);
+					waddch(win, ch);
+				}
+			}
+		}
+		/* else "spurious wakeup", do nothing */
+	}
+
 	window_end();
 	aug_log("interact: end\n");
+
+
 }
 
 static void *ui_t_run(void *user) {
@@ -173,9 +235,9 @@ static void *ui_t_run(void *user) {
 
 	err_set_cleanup_fn(ui_err_cleanup);
 	ui_t_lock(); /* what if this fails? aug_unload before init finishes? */
-	g.waiting = 1;
 
 	while(1) {
+		g.waiting = 1;
 		status = pthread_cond_wait(&g.wakeup, &g.mtx);
 		if(status != 0)
 			ERR_UNLOCK_DIE(status, "error in condition wait");
@@ -186,8 +248,13 @@ static void *ui_t_run(void *user) {
 		}
 		else if(g.waiting == 0) {
 			interact();
-			g.waiting = 1;
+			/* shut down might be signaled during interaction */
+			if(g.shutdown != 0) {
+				ui_t_unlock();
+				break;	
+			}
 		}
+		/* else "spurious wakeup". do nothing */
 	}
 
 	return 0;
