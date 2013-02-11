@@ -227,16 +227,16 @@ static void ui_t_refresh() {
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, ch, refresh;
+	int status, ch;
 	size_t key_amt, i;
 	WINDOW *win;
 
 	aug_log("interact: begin\n");
 	window_start();
+	ui_t_refresh();
 	g.on = 1;
 	g.waiting = 0;
-	refresh = 1;
-
+	
 	while(1) {
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
@@ -264,11 +264,6 @@ static void interact() {
 			}
 		} /* else if(g.waiting==0) */
 		/* else "spurious wakeup", do nothing */
-
-		if(refresh != 0) {
-			ui_t_refresh();
-			refresh = 0;
-		}
 
 		g.waiting = 1;
 		status = pthread_cond_wait(&g.wakeup, &g.mtx);
