@@ -193,7 +193,7 @@ int ui_on_input(const int *ch) {
 		return -1;
 	}			
 
-	return 0;
+	return 1;
 unlock:
 	pthread_mutex_unlock(&g.pipe_mtx);
 	return -1;
