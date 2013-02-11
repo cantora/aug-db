@@ -183,7 +183,7 @@ int ui_on_input(const int *ch) {
 		return -1;
 	}
 	
-	aug_log("ui_on_input\n");
+	/*aug_log("ui_on_input\n");*/
 	if(fifo_avail(&g.input_pipe) < 1)
 		goto unlock;
 	fifo_push(&g.input_pipe, ch);
@@ -215,24 +215,29 @@ static void ui_t_unlock() {
 		ERR_DIE(status, "the ui thread encountered error while trying to unlock");
 }
 
+static void ui_t_refresh() {
+	aug_lock_screen();
+	aug_screen_panel_update();
+	aug_screen_doupdate();
+	aug_unlock_screen();
+	aug_log("refreshed window\n");
+}
+
 /* mtx is locked upon entry to this function.
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, ch;
+	int status, ch, refresh;
 	size_t key_amt, i;
 	WINDOW *win;
 
 	aug_log("interact: begin\n");
 	window_start();
 	g.on = 1;
-	
+	g.waiting = 0;
+	refresh = 1;
+
 	while(1) {
-		g.waiting = 1;
-		status = pthread_cond_wait(&g.wakeup, &g.mtx);
-		if(status != 0)
-			ERR_UNLOCK_DIE(status, "error in condition wait");
-	
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
 			/* leave mtx locked */
@@ -240,7 +245,7 @@ static void interact() {
 		}
 		else if(g.waiting == 0) {
 			if( (key_amt = fifo_amt(&g.input_pipe)) > 0) {
-				aug_log("consume %d chars of input\n", key_amt);
+				/*aug_log("consume %d chars of input\n", key_amt);*/
 				aug_lock_screen();
 				if(window_ncwin(&win) != 0) {
 					aug_unlock_screen();
@@ -257,11 +262,22 @@ static void interact() {
 
 				aug_unlock_screen();
 			}
-		}
+		} /* else if(g.waiting==0) */
 		/* else "spurious wakeup", do nothing */
-	}
+
+		if(refresh != 0) {
+			ui_t_refresh();
+			refresh = 0;
+		}
+
+		g.waiting = 1;
+		status = pthread_cond_wait(&g.wakeup, &g.mtx);
+		if(status != 0)
+			ERR_UNLOCK_DIE(status, "error in condition wait");
+	} /* while(1) */
 
 	window_end();
+	ui_t_refresh();
 	g.on = 0;
 	aug_log("interact: end\n");
 }
