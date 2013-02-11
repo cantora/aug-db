@@ -244,16 +244,20 @@ static void interact() {
 			if( (key_amt = fifo_amt(&g.input_pipe)) > 0) {
 				/*aug_log("consume %d chars of input\n", key_amt);*/
 				aug_lock_screen();
-				if(window_ncwin(&win) != 0) {
+				window_ncwin(&win);
+				if(win == NULL) {
 					aug_unlock_screen();
 					window_end();
-					ERR_UNLOCK_DIE(0, "expected to be able to get window from panel");
+					ERR_UNLOCK_DIE(0, "window was null");
 				}
 
 				for(i = 0; i < key_amt; i++) {
 					fifo_pop(&g.input_pipe, &ch);
 					waddch(win, ch);
 				}
+
+				wsyncup(win);
+				wcursyncup(win);
 				aug_screen_panel_update();
 				aug_screen_doupdate();
 

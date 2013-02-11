@@ -11,6 +11,6 @@ int window_off();
 void window_start();
 void window_end();
 
-int window_ncwin(WINDOW **win);
+void window_ncwin(WINDOW **win);
 
 #endif /* AUG_DB_WINDOW_H */
