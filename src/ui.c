@@ -24,7 +24,6 @@ static struct {
 	int waiting;
 	int error;
 	int sig_cmd_key;
-	int on;
 	int input_buf[1024];
 	struct fifo input_pipe;
 	pthread_mutex_t pipe_mtx;
@@ -62,7 +61,6 @@ int ui_init() {
 	g.error = 0;
 	g.waiting = 0;
 	g.sig_cmd_key = 0;
-	g.on = 0;
 	if(pthread_mutex_init(&g.mtx, NULL) != 0)
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
@@ -176,7 +174,7 @@ int ui_on_cmd_key() {
 }
 
 int ui_on_input(const int *ch) {
-	if(g.on == 0)
+	if(window_off() != 0)
 		return 0;
 
 	if( (pthread_mutex_lock(&g.pipe_mtx)) != 0) {
@@ -234,7 +232,6 @@ static void interact() {
 	aug_log("interact: begin\n");
 	window_start();
 	ui_t_refresh();
-	g.on = 1;
 	g.waiting = 0;
 	
 	while(1) {
@@ -273,7 +270,6 @@ static void interact() {
 
 	window_end();
 	ui_t_refresh();
-	g.on = 0;
 	aug_log("interact: end\n");
 }
 

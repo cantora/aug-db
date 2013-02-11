@@ -46,6 +46,16 @@ static void window_unlock() {
 		ERR_DIE(status, "failed to lock window");
 }
 
+int window_off() {
+	int result;
+
+	window_lock();
+	result = g.off;
+	window_unlock();
+	
+	return result;
+}
+
 void window_start() {
 	window_lock();
 	if(g.off == 0)
