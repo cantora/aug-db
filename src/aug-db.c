@@ -97,12 +97,8 @@ void aug_plugin_free() {
 	g_freed = 1;
 	aug_log("free\n");
 	aug_key_unbind(g_cmd_ch);
-#ifdef AUG_DB_DEBUG
 	if(ui_free() != 0)
 		err_panic(0, "failed to free ui");
-#else
-	ui_free();
-#endif
 	err_free();
 }
 
@@ -129,7 +125,7 @@ static void on_input(int *ch, aug_action *action, void *user) {
 	(void)(user);
 
 	if( (status = ui_on_input(ch)) < 0)
-		ERR_IN_CB("error in ui_on_input. unload...");
+		ERR_IN_CB("error in ui_on_input. unload...\n");
 	
 	if(status == 1)
 		*action = AUG_ACT_CANCEL;

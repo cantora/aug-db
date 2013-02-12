@@ -5,6 +5,7 @@
 #include "util.h"
 #include "window.h"
 #include "fifo.h"
+#include "ui_state.h"
 
 #include <pthread.h>
 #include <errno.h>
@@ -69,6 +70,7 @@ int ui_init() {
 		goto cleanup_cond;
 
 	fifo_init(&g.input_pipe, g.input_buf, sizeof(int), ARRAY_SIZE(g.input_buf));
+	ui_state_init();
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
@@ -214,27 +216,17 @@ static void ui_t_unlock() {
 		ERR_DIE(status, "the ui thread encountered error while trying to unlock");
 }
 
-static void ui_t_refresh() {
-	aug_lock_screen();
-	aug_screen_panel_update();
-	aug_screen_doupdate();
-	aug_unlock_screen();
-	aug_log("refreshed window\n");
-}
-
 /* mtx is locked upon entry to this function.
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, ch;
-	size_t key_amt, i;
-	WINDOW *win;
+	int status;
 
 	aug_log("interact: begin\n");
 	if(window_start() != 0)
 		ERR_UNLOCK_DIE(0, "failed to start window");
 
-	ui_t_refresh();
+	window_refresh();
 	g.waiting = 0;
 	
 	while(1) {
@@ -244,28 +236,8 @@ static void interact() {
 			break;
 		}
 		else if(g.waiting == 0) {
-			if( (key_amt = fifo_amt(&g.input_pipe)) > 0) {
-				/*aug_log("consume %d chars of input\n", key_amt);*/
-				aug_lock_screen();
-				window_ncwin(&win);
-				if(win == NULL) {
-					aug_unlock_screen();
-					window_end();
-					ERR_UNLOCK_DIE(0, "window was null");
-				}
-
-				for(i = 0; i < key_amt; i++) {
-					fifo_pop(&g.input_pipe, &ch);
-					waddch(win, ch);
-				}
-
-				wsyncup(win);
-				wcursyncup(win);
-				aug_screen_panel_update();
-				aug_screen_doupdate();
-
-				aug_unlock_screen();
-			}
+			ui_state_consume(&g.input_pipe);
+			window_render();
 		} /* else if(g.waiting==0) */
 		/* else "spurious wakeup", do nothing */
 
@@ -278,7 +250,7 @@ static void interact() {
 	} /* while(1) */
 
 	window_end();
-	ui_t_refresh();
+	window_refresh();
 	aug_log("interact: end\n");
 }
 

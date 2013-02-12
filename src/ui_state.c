@@ -1,5 +1,6 @@
 #include "ui_state.h"
 
+#include "api_calls.h"
 #include "err.h"
 #include <ccan/array_size/array_size.h>
 
@@ -39,25 +40,48 @@ void ui_state_consume(struct fifo *input) {
 
 static void ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
-	int ch;
+	int ch, brk;
 	
 	if( (amt = fifo_amt(input)) < 1)
 		return;
 
+	brk = 0;
 	for(i = 0; i < amt; i++) {
 		fifo_pop(input, &ch);
-		if(ch == '\n' || ch == '\r') {
+		switch(ch) {
+		case '\n': /* fall through */
+		case '\r':
 			if(g.query.prev_nl != 0)
 				continue;
 
 			g.query.prev_nl = 1;
 			g.query.run = 1;
+			brk = 1;
 			break;
-		}
-		else {/* truncate at query size limit for now */
+		case 0x08: /* ^H fall through */
+		case 0x7f: /* backspace */
+			if(g.query.n > 0)
+				g.query.n--;
 			g.query.prev_nl = 0;
-			if(g.query.n < ARRAY_SIZE(g.query.value))
-				g.query.value[g.query.n++] = ch;
+			break;
+		case 0x07: /* ^G */
+			g.query.n = 0;
+			g.query.prev_nl = 0;
+			break;
+		default: /* truncate at query size limit for now */
+			g.query.prev_nl = 0;
+			if(ch >= 0x20 && ch <= 0x7e) {
+				aug_log("added query char: 0x%04x\n", ch);
+				if(g.query.n < ARRAY_SIZE(g.query.value))
+					g.query.value[g.query.n++] = ch;
+			}
+			else
+				aug_log("dropped unprintable character 0x%04x\n", ch);
+		} /* switch(ch) */
+
+		if(brk != 0) {
+			brk = 0;
+			break;
 		}
 	} /* for i up to amt */
 
