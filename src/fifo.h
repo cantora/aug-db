@@ -20,6 +20,8 @@ size_t fifo_avail(const struct fifo *f);
 void fifo_peek(const struct fifo *f, void *dest, size_t n);
 #define fifo_top(_f_ptr, _dest) \
 	fifo_peek(_f_ptr, _dest, 1)
+#define fifo_peek_all(_f_ptr, _dest) \
+	fifo_peek(_f_ptr, _dest, fifo_avail(_f_ptr))
 
 void fifo_consume(struct fifo *f, void *dest, size_t n);
 #define fifo_pop(_f_ptr, _dest) \
