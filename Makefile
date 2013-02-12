@@ -19,7 +19,7 @@ DEP_FLAGS		= -MMD -MP -MF $(patsubst %.o, %.d, $@)
 
 TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
-TEST_LIB		= -pthread $(LIBCCAN) -lncursesw
+TEST_LIB		= -pthread $(LIBCCAN) -lncursesw -lpanel
 
 default: all
 
