@@ -4,6 +4,7 @@
 #include "err_dispatch.h"
 
 #include <stdlib.h>
+#include <ccan/str/str.h>
 
 /* these routines are meant for a non-primary thread 
  * (i.e. not aug_plugin_init or aug_plugin_free)
@@ -27,6 +28,11 @@
 		err_call_cleanup_fn(_eno); \
 		err_dispatch_signal(_eno); \
 		pthread_exit((void *)1); \
+	} while(0)
+
+#define err_assert(_expr) \
+	do { \
+		if(!(_expr)) { err_panic(0, "failed assert: " stringify(_expr)); } \
 	} while(0)
 
 /* these should be called by the main thread */

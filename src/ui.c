@@ -174,6 +174,8 @@ int ui_on_cmd_key() {
 }
 
 int ui_on_input(const int *ch) {
+	/*aug_log("ui_on_input\n");*/
+
 	if(window_off() != 0)
 		return 0;
 
@@ -181,7 +183,6 @@ int ui_on_input(const int *ch) {
 		return -1;
 	}
 	
-	/*aug_log("ui_on_input\n");*/
 	if(fifo_avail(&g.input_pipe) < 1)
 		goto unlock;
 	fifo_push(&g.input_pipe, ch);
@@ -230,7 +231,9 @@ static void interact() {
 	WINDOW *win;
 
 	aug_log("interact: begin\n");
-	window_start();
+	if(window_start() != 0)
+		ERR_UNLOCK_DIE(0, "failed to start window");
+
 	ui_t_refresh();
 	g.waiting = 0;
 	
@@ -268,8 +271,10 @@ static void interact() {
 
 		g.waiting = 1;
 		status = pthread_cond_wait(&g.wakeup, &g.mtx);
-		if(status != 0)
+		if(status != 0) {
+			window_end();
 			ERR_UNLOCK_DIE(status, "error in condition wait");
+		}
 	} /* while(1) */
 
 	window_end();
