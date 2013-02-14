@@ -67,6 +67,7 @@ static int ui_state_consume_query(struct fifo *input) {
 				g.query.n--;
 			g.query.prev_nl = 0;
 			break;
+		case 0x014a:
 		case 0x07: /* ^G */
 			g.query.n = 0;
 			g.query.prev_nl = 0;

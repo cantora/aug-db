@@ -64,10 +64,13 @@ void window_start() {
 	aug_lock_screen();
 	if( (win = panel_window(g.panel)) == NULL) 
 		err_panic(0, "could not get window from panel\n");
-
+	
 	getmaxyx(win, rows, cols);
 	box(win, 0, 0);
 	g.win = derwin(win, rows-2, cols-2, 1, 1);
+	if(keypad(stdscr, 1) == ERR)
+		err_panic(0, "failed to enable keypad");
+	
 	aug_unlock_screen();
 	if(g.win == NULL) 
 		err_panic(0, "derwin was null\n");
@@ -82,6 +85,9 @@ void window_end() {
 	err_assert(g.off == 0);
 
 	aug_lock_screen();
+	if(keypad(stdscr, 0) == ERR)
+		err_panic(0, "failed to disable keypad");
+
 	status = delwin(g.win);
 	aug_unlock_screen();
 	if(status == ERR)

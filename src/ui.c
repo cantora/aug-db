@@ -138,10 +138,10 @@ void ui_on_cmd_key() {
 
 int ui_on_input(const int *ch) {
 	int status;
-	aug_log("ui_on_input: 0x%04x\n", *ch);
+	/*aug_log("ui_on_input: 0x%04x\n", *ch);*/
 
 	if(window_off() != 0) {
-		aug_log("ui_on_input: window is off. ignore input\n");
+		/*aug_log("ui_on_input: window is off. ignore input\n");*/
 		return 1;
 	}
 
@@ -155,7 +155,7 @@ int ui_on_input(const int *ch) {
 	wakeup_ui_thread(NULL);	
 	UI_UNLOCK_PIPE(status);
 
-	aug_log("ui_on_input: successfully pushed input\n");
+	/*aug_log("ui_on_input: successfully pushed input\n");*/
 	return 0;
 }
 
@@ -190,12 +190,12 @@ static void interact() {
 		if(fifo_amt(&g.input_pipe) > 0)
 			continue;
 
-		aug_log("interact: wait\n");
+		/*aug_log("interact: wait\n");*/
 		g.waiting = 1;
 		if( (status = pthread_cond_wait(&g.wakeup, &g.mtx)) != 0)
 			err_panic(status, "error in condition wait");
 		g.waiting = 0;
-		aug_log("interact: wokeup\n");
+		/*aug_log("interact: wokeup\n");*/
 	} /* while(1) */
 
 	window_end();
