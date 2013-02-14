@@ -122,14 +122,12 @@ void ui_unlock() {
 static void wakeup_ui_thread(void (*callback)()) {
 	int status;
 
-	err_assert(g.waiting != 0);
-
 	ui_lock();
-	g.waiting = 0;
 	if(callback != NULL)
 		(*callback)();
-	if( (status = pthread_cond_signal(&g.wakeup)) != 0) 
-		err_panic(status, "failed to signal cond");
+	if(g.waiting != 0)
+		if( (status = pthread_cond_signal(&g.wakeup)) != 0) 
+			err_panic(status, "failed to signal cond");
 	ui_unlock();
 }
 
@@ -165,32 +163,38 @@ int ui_on_input(const int *ch) {
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status;
+	int status, amt;
 
 	aug_log("interact: begin\n");
 	window_start();
+	window_render();
 
-	window_refresh();
 	g.waiting = 0;
-	
 	while(1) {
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
 			/* leave mtx locked */
 			break;
 		}
-		else if(g.waiting == 0) {
-			ui_state_consume(&g.input_pipe);
-			window_render();
-		} /* else if(g.waiting==0) */
-		/* else "spurious wakeup", do nothing */
+		UI_UNLOCK(status);
 
-		g.waiting = 1;
+		while(fifo_amt(&g.input_pipe) > 0) {
+			UI_LOCK_PIPE(status);
+			amt = ui_state_consume(&g.input_pipe);
+			UI_UNLOCK_PIPE(status);
+			if(amt > 0)
+				window_render();
+		}
+				
+		UI_LOCK(status);
+		if(fifo_amt(&g.input_pipe) > 0)
+			continue;
+
 		aug_log("interact: wait\n");
-		
+		g.waiting = 1;
 		if( (status = pthread_cond_wait(&g.wakeup, &g.mtx)) != 0)
 			err_panic(status, "error in condition wait");
-
+		g.waiting = 0;
 		aug_log("interact: wokeup\n");
 	} /* while(1) */
 
@@ -209,11 +213,12 @@ static void *ui_t_run(void *user) {
 		g.waiting = 1;
 		if( (status = pthread_cond_wait(&g.wakeup, &g.mtx) ) != 0)
 			err_panic(status, "error in condition wait");
+		g.waiting = 0;
 
-		clr_sig_cmd_key();
 		if(g.shutdown != 0)
 			break;
-		else if(g.waiting == 0) {
+		else if(g.sig_cmd_key != 0) {
+			clr_sig_cmd_key();
 			interact();
 			/* shut down might be signaled during interaction */
 			if(g.shutdown != 0)

@@ -15,7 +15,7 @@ static struct {
 } g;
 
 static void query_reset();
-static void ui_state_consume_query(struct fifo *);
+static int ui_state_consume_query(struct fifo *);
 
 void ui_state_init() {
 	g.current = UI_STATE_QUERY;
@@ -28,22 +28,25 @@ static void query_reset() {
 	g.query.run = 0;
 }
 
-void ui_state_consume(struct fifo *input) {
+int ui_state_consume(struct fifo *input) {
+	int amt;
 	switch(g.current) {
 	case UI_STATE_QUERY:
-		ui_state_consume_query(input);
+		amt = ui_state_consume_query(input);
 		break;
 	default:
 		err_panic(0, "invalid state: %d", g.current);
 	}
+
+	return amt;
 }
 
-static void ui_state_consume_query(struct fifo *input) {
+static int ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
 	int ch, brk;
 	
 	if( (amt = fifo_amt(input)) < 1)
-		return;
+		return 0;
 
 	brk = 0;
 	for(i = 0; i < amt; i++) {
@@ -85,6 +88,7 @@ static void ui_state_consume_query(struct fifo *input) {
 		}
 	} /* for i up to amt */
 
+	return i;
 }
 
 ui_state_name ui_state_current() {
