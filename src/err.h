@@ -1,8 +1,6 @@
 #ifndef AUG_DB_ERR_H
 #define AUG_DB_ERR_H
 
-#include "err_dispatch.h"
-
 #include <stdlib.h>
 #include <ccan/str/str.h>
 
@@ -13,8 +11,12 @@
  * configured cleanup function, then signal the err_dispatch handler 
  */
 
+/* change back to this at stable version 
+ * #define err_warn(_eno, ...) \
+ *	err_log(__FILE__, __LINE__, _eno, __VA_ARGS__)
+ */
 #define err_warn(_eno, ...) \
-	err_log(__FILE__, __LINE__, _eno, __VA_ARGS__)
+	err_panic(_eno, __VA_ARGS__)
 
 #define err_panic(_eno, ...) \
 	do { \
@@ -22,26 +24,11 @@
 		exit(1); \
 	} while(0)
 
-#define err_die(_eno, ...) \
-	do { \
-		err_log(__FILE__, __LINE__, _eno, __VA_ARGS__); \
-		err_call_cleanup_fn(_eno); \
-		err_dispatch_signal(_eno); \
-		pthread_exit((void *)1); \
-	} while(0)
-
 #define err_assert(_expr) \
 	do { \
 		if(!(_expr)) { err_panic(0, "failed assert: " stringify(_expr)); } \
 	} while(0)
 
-/* these should be called by the main thread */
-int err_init();
-int err_free();
-
-/* meant for non-primary threads */
-void err_set_cleanup_fn(void (*cleanup_fn)(int error) );
-void err_call_cleanup_fn(int error);
 void err_log(const char *file, int lineno, 
 					int error, const char *format, ...);
 

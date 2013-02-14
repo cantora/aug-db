@@ -4,11 +4,11 @@
 #include "api_calls.h"
 /* these expect to be called by the main thread */
 int window_init();
-int window_free();
+void window_free();
 
 int window_off();
 /* these expect to be called by the ui thread */
-int window_start();
+void window_start();
 void window_end();
 void window_refresh();
 void window_render();

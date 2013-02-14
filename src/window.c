@@ -3,8 +3,7 @@
 #include "api_calls.h"
 #include "err.h"
 #include "ui_state.h"
-
-#include <pthread.h>
+#include "lock.h"
 
 static struct {
 	PANEL *panel;
@@ -15,16 +14,14 @@ static struct {
 
 static void window_reset_vars();
 
-#define ERR_UNLOCK_WARN(...) \
-	do { \
-		pthread_mutex_unlock(&g.mtx); \
-		aug_log(__VA_ARGS__); \
-	} while(0)
-
 int window_init() {
-	if(pthread_mutex_init(&g.mtx, NULL) != 0)
-		return -1;	
+	int status;
+	if( (status = pthread_mutex_init(&g.mtx, NULL)) != 0) {
+		err_warn(status, "failed to init mutex");
+		return -1;
+	}
 	window_reset_vars();
+
 	return 0;
 }
 
@@ -34,72 +31,54 @@ static void window_reset_vars() {
 	g.win = NULL;
 }
 
-int window_free() {
-	if(pthread_mutex_destroy(&g.mtx) != 0)
-		return -1;
-		
-	return 0;
+void window_free() {
+	int status;
+	if( (status = pthread_mutex_destroy(&g.mtx)) != 0)
+		err_warn(status, "failed to destroy window mutex");
 }
 
-static void window_lock() {
-	int status;
-	if( (status = pthread_mutex_lock(&g.mtx)) != 0 )
-		err_panic(status, "failed to lock window");
-}
-static void window_unlock() {
-	int status;
-	if( (status = pthread_mutex_unlock(&g.mtx)) != 0 )
-		err_panic(status, "failed to lock window");
-}
-
+#define WINDOW_LOCK(_status) \
+	AUG_DB_LOCK(&g.mtx, _status, "failed to lock window")
+#define WINDOW_UNLOCK(_status) \
+	AUG_DB_UNLOCK(&g.mtx, _status, "failed to unlock window")
+	
 int window_off() {
-	int result;
+	int result, status;
 
-	window_lock();
+	WINDOW_LOCK(status);
 	result = g.off;
-	window_unlock();
+	WINDOW_UNLOCK(status);
 	
 	return result;
 }
 
-int window_start() {
+void window_start() {
 	WINDOW *win;
-	int rows, cols;
+	int status, rows, cols;
 
-	window_lock();
+	WINDOW_LOCK(status);
 	err_assert(g.off != 0);
 
 	g.off = 0;
 	aug_screen_panel_alloc(0, 0, 0, 0, &g.panel);
 	aug_lock_screen();
-	if( (win = panel_window(g.panel)) == NULL) {
-		ERR_UNLOCK_WARN("could not get window from panel\n");
-		aug_unlock_screen();
-		aug_screen_panel_dealloc(g.panel);
-		return -1;
-	}
+	if( (win = panel_window(g.panel)) == NULL) 
+		err_panic(0, "could not get window from panel\n");
 
 	getmaxyx(win, rows, cols);
 	box(win, 0, 0);
 	g.win = derwin(win, rows-2, cols-2, 1, 1);
 	aug_unlock_screen();
-	if(g.win == NULL) {
-		ERR_UNLOCK_WARN("derwin was null\n");
-		aug_screen_panel_dealloc(g.panel);
-		return -1;
-	}
+	if(g.win == NULL) 
+		err_panic(0, "derwin was null\n");
 
-	window_unlock();
-	return 0;
+	WINDOW_UNLOCK(status);
 }
 
-/* an error here means we cant be sure that the screen is or can 
- * be cleaned up. thus, no error in this function is recoverable.
- */
 void window_end() {
 	int status;
 
-	window_lock();
+	WINDOW_LOCK(status);
 	err_assert(g.off == 0);
 
 	aug_lock_screen();
@@ -110,7 +89,7 @@ void window_end() {
 
 	aug_screen_panel_dealloc(g.panel);
 	window_reset_vars();
-	window_unlock();
+	WINDOW_UNLOCK(status);
 }
 
 void window_ncwin(WINDOW **win) {
@@ -127,12 +106,12 @@ void window_refresh() {
 
 #define WADDCH(_win, _ch) \
 	do { \
-		if(waddch(_win, _ch) == ERR) { err_panic(0, "failed to write char to window"); } \
+		if(waddch(_win, _ch) == ERR) { err_warn(0, "failed to write char to window"); } \
 	} while(0)
 	
 #define WPRINTW(_win, ...) \
 	do { \
-		if(wprintw(_win, __VA_ARGS__) == ERR) { err_panic(0, "failed to printw to window"); } \
+		if(wprintw(_win, __VA_ARGS__) == ERR) { err_warn(0, "failed to printw to window"); } \
 	} while(0)
 
 static void window_render_query() {
