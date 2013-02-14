@@ -182,6 +182,10 @@ static void interact() {
 			UI_LOCK_PIPE(status);
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
+			if(ui_state_query_run(1) != 0) {
+				aug_log("run query\n");
+				ui_state_query_value_reset();
+			}
 			if(amt > 0)
 				window_render();
 		}

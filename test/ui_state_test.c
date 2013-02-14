@@ -37,7 +37,7 @@ void test1() {
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 0);
 
-	ui_state_consume(&p1);
+	ok1(ui_state_consume(&p1) == 4);
 	ok1(ui_state_current() == UI_STATE_QUERY);
 	ok1(ui_state_query_run(1) == 1);
 	ok1(ui_state_query_run(0) == 0);
@@ -49,7 +49,7 @@ void test1() {
 	ok1(memcmp(outbuf1, iqueries + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1) == 0);
 	
-	ui_state_consume(&p1);
+	ok1(ui_state_consume(&p1) == 13);
 	ok1(ui_state_current() == UI_STATE_QUERY);
 	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
@@ -60,7 +60,7 @@ void test1() {
 	ok1(memcmp(outbuf1, iqueries + 4 + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1 - 4) == 0);
 
-	ui_state_consume(&p1);
+	ok1(ui_state_consume(&p1) == 14);
 	ok1(ui_state_current() == UI_STATE_QUERY);
 	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
@@ -71,7 +71,7 @@ void test1() {
 	ok1(memcmp(outbuf1, iqueries + 18 + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1 - 18) == 0);
 
-	ui_state_consume(&p1);
+	ok1(ui_state_consume(&p1) == 10);
 	ok1(ui_state_current() == UI_STATE_QUERY);
 	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
@@ -83,13 +83,13 @@ void test1() {
 			ARRAY_SIZE(iqueries) - query_len-1 - 32) == 0);
 	
 	ok1(fifo_amt(&p1) == 0);
-	ui_state_consume(&p1);
+	ok1(ui_state_consume(&p1) == 0);
 	ok1(ui_state_current() == UI_STATE_QUERY);
 	ok1(ui_state_query_run(0) == 0);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 0);
 	
-#define TEST1AMT 3 + 6 + 5 + 5 + 5 + 4
+#define TEST1AMT 3 + 7 + 6 + 6 + 6 + 5
 	diag("----test1----\n#");
 }
 

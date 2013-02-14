@@ -89,7 +89,7 @@ static int ui_state_consume_query(struct fifo *input) {
 		}
 	} /* for i up to amt */
 
-	return i;
+	return i+1;
 }
 
 ui_state_name ui_state_current() {
