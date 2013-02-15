@@ -10,6 +10,7 @@ static struct {
 	pthread_mutex_t mtx;
 	int off;
 	WINDOW *win;
+	WINDOW *search_win;
 } g;
 
 static void window_reset_vars();
@@ -65,8 +66,8 @@ int window_start() {
 		err_panic(0, "could not get window from panel\n");
 	
 	getmaxyx(win, rows, cols);
-	/* need at least 3 rows and 3 columns for box */
-	if(rows < 3 || cols < 3) {
+	
+	if(rows < 5 || cols < 20) {
 		aug_unlock_screen();
 		aug_screen_panel_dealloc(g.panel);
 		WINDOW_UNLOCK(status);
@@ -75,12 +76,16 @@ int window_start() {
 
 	box(win, 0, 0);
 	g.win = derwin(win, rows-2, cols-2, 1, 1);
+	if(g.win == NULL) 
+		err_panic(0, "derwin was null\n");
+	g.search_win = derwin(g.win, 1, cols-2, 0, 0);
+	if(g.search_win == NULL) 
+		err_panic(0, "g.search_win was null\n");
+	
 	if(keypad(stdscr, 1) == ERR)
 		err_panic(0, "failed to enable keypad");
 	
 	aug_unlock_screen();
-	if(g.win == NULL) 
-		err_panic(0, "derwin was null\n");
 
 	g.off = 0;
 	WINDOW_UNLOCK(status);
@@ -98,10 +103,11 @@ void window_end() {
 	if(keypad(stdscr, 0) == ERR)
 		err_panic(0, "failed to disable keypad");
 
-	status = delwin(g.win);
-	aug_unlock_screen();
-	if(status == ERR)
+	if(delwin(g.search_win) == ERR)
 		err_panic(0, "failed to delete window\n");
+	if(delwin(g.win) == ERR)
+		err_panic(0, "failed to delete window\n");
+	aug_unlock_screen();
 
 	aug_screen_panel_dealloc(g.panel);
 	window_reset_vars();
@@ -133,22 +139,32 @@ void window_refresh() {
 static void window_render_query() {
 	const int *query;
 	size_t n,i;
+	int rows, cols, x, y;
 
 	err_assert(g.win != NULL);
 
 	ui_state_query_value(&query, &n);
 	aug_lock_screen();
-	if(werase(g.win) == ERR)
+	if(werase(g.search_win) == ERR)
 		err_panic(0, "failed to erase window");
-	if(wmove(g.win, 0, 0) == ERR)
+	if(wmove(g.search_win, 0, 0) == ERR)
 		err_panic(0, "failed to move cursor");
 
-	WPRINTW(g.win, "(search)`");
+	WPRINTW(g.search_win, "(search)`");
 	if(n > 0) 
-		for(i = 0; i < n; i++) 
-			WADDCH(g.win, query[i]);
-	WPRINTW(g.win, "':");
+		for(i = 0; i < n; i++) {
+			getmaxyx(g.search_win, rows, cols);
+			getyx(g.search_win, y, x);
+			/* if x >= cols-1-2 then the WPRINTW will fail */
+			if(y >= rows || x >= (cols-1-2) ) {
+				err_warn(0, "exceeded window size of %d,%d", rows, cols);
+				goto update;
+			}
+			WADDCH(g.search_win, query[i]);
+		}
+	WPRINTW(g.search_win, "':");
 
+update:
 	wsyncup(g.win);
 	wcursyncup(g.win);
 	aug_screen_panel_update();
