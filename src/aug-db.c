@@ -105,6 +105,7 @@ static void on_dims_change(int rows, int cols, void *user) {
 	(void)(user);
 	(void)(rows);
 	(void)(cols);
+	ui_on_dims_change(rows, cols);
 }
 
 static int char_rep_to_char(const char *str, int *ch) {

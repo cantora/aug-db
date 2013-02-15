@@ -52,20 +52,27 @@ int window_off() {
 	return result;
 }
 
-void window_start() {
+int window_start() {
 	WINDOW *win;
 	int status, rows, cols;
 
 	WINDOW_LOCK(status);
 	err_assert(g.off != 0);
 
-	g.off = 0;
 	aug_screen_panel_alloc(0, 0, 0, 0, &g.panel);
 	aug_lock_screen();
 	if( (win = panel_window(g.panel)) == NULL) 
 		err_panic(0, "could not get window from panel\n");
 	
 	getmaxyx(win, rows, cols);
+	/* need at least 3 rows and 3 columns for box */
+	if(rows < 3 || cols < 3) {
+		aug_unlock_screen();
+		aug_screen_panel_dealloc(g.panel);
+		WINDOW_UNLOCK(status);
+		return -1;
+	}
+
 	box(win, 0, 0);
 	g.win = derwin(win, rows-2, cols-2, 1, 1);
 	if(keypad(stdscr, 1) == ERR)
@@ -75,7 +82,10 @@ void window_start() {
 	if(g.win == NULL) 
 		err_panic(0, "derwin was null\n");
 
+	g.off = 0;
 	WINDOW_UNLOCK(status);
+
+	return 0;
 }
 
 void window_end() {

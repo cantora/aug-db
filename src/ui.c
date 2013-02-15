@@ -25,6 +25,7 @@ static struct {
 	int shutdown;
 	int waiting;
 	int sig_cmd_key;
+	int sig_dims_changed;
 	int input_buf[1024];
 	struct fifo input_pipe;
 	pthread_mutex_t pipe_mtx;
@@ -32,17 +33,21 @@ static struct {
 
 static void *ui_t_run(void *);
 
-static void set_sig_cmd_key() {
-	g.sig_cmd_key = 1;
-}
-static void clr_sig_cmd_key() {
-	g.sig_cmd_key = 0;
-}
+#define DEF_SET_SIG_FN(_sig) \
+	static void set_sig_ ## _sig () { g.sig_ ## _sig = 1; }
+#define DEF_CLR_SIG_FN(_sig) \
+	static void clr_sig_ ## _sig () { g.sig_ ## _sig = 0; }
+
+DEF_SET_SIG_FN(cmd_key)
+DEF_CLR_SIG_FN(cmd_key)
+DEF_SET_SIG_FN(dims_changed)
+DEF_CLR_SIG_FN(dims_changed)
 
 int ui_init() {
 	g.shutdown = 0;
 	g.waiting = 0;
-	g.sig_cmd_key = 0;
+	clr_sig_cmd_key();
+	clr_sig_dims_changed();
 	if(pthread_mutex_init(&g.mtx, NULL) != 0)
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
@@ -159,22 +164,62 @@ int ui_on_input(const int *ch) {
 	return 0;
 }
 
+void ui_on_dims_change(int rows, int cols) {
+	(void)(rows);
+	(void)(cols);
+
+	wakeup_ui_thread(set_sig_dims_changed);	
+}
+
+#define WINDOW_TOO_SMALL_MSG "window is too small to fit aug-db interface\n"
+
+static int render() {
+	int status;
+
+	UI_LOCK(status);
+	if(g.sig_dims_changed) {
+		clr_sig_dims_changed();
+		window_end();
+		if(window_start() != 0) {
+			aug_log(WINDOW_TOO_SMALL_MSG);
+			UI_UNLOCK(status);
+			return -1;
+		}
+	}
+	UI_UNLOCK(status);
+
+	window_render();
+	return 0;
+}
+
 /* mtx is locked upon entry to this function.
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, amt;
+	int status, amt, do_render;
 
 	aug_log("interact: begin\n");
-	window_start();
-	window_render();
+	if(window_start() != 0) {
+		aug_log(WINDOW_TOO_SMALL_MSG);
+		return;
+	}
 
+	do_render = 1;
 	g.waiting = 0;
 	while(1) {
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
 			/* leave mtx locked */
 			break;
+		}
+		if(g.sig_dims_changed != 0) {
+			clr_sig_dims_changed();
+			window_end();
+			if(window_start() != 0) {
+				aug_log(WINDOW_TOO_SMALL_MSG);
+				goto refresh;
+			}
+			do_render = 1;
 		}
 		UI_UNLOCK(status);
 
@@ -186,10 +231,19 @@ static void interact() {
 				aug_log("run query\n");
 				ui_state_query_value_reset();
 			}
-			if(amt > 0)
-				window_render();
+			if(amt > 0) {
+				if(render() != 0) 
+					goto refresh;  /* window_end() was called by render() */
+				do_render = 0;
+			}
 		}
-				
+		
+		if(do_render) {
+			if(render() != 0) 
+				goto refresh;  /* window_end() was called by render() */
+			do_render = 0;
+		}
+
 		UI_LOCK(status);
 		if(fifo_amt(&g.input_pipe) > 0)
 			continue;
@@ -203,6 +257,7 @@ static void interact() {
 	} /* while(1) */
 
 	window_end();
+refresh:
 	window_refresh();
 	aug_log("interact: end\n");
 }

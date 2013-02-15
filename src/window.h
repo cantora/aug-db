@@ -8,7 +8,7 @@ void window_free();
 
 int window_off();
 /* these expect to be called by the ui thread */
-void window_start();
+int window_start();
 void window_end();
 void window_refresh();
 void window_render();
