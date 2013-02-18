@@ -157,14 +157,14 @@ static void window_render_query() {
 			getyx(g.search_win, y, x);
 			/* if x >= cols-1-2 then the WPRINTW will fail */
 			if(y >= rows || x >= (cols-1-2) ) {
-				err_warn(0, "exceeded window size of %d,%d", rows, cols);
+				aug_log("exceeded window size of %d,%d\n", rows, cols);
 				goto update;
 			}
 			WADDCH(g.search_win, query[i]);
 		}
-	WPRINTW(g.search_win, "':");
 
 update:
+	WPRINTW(g.search_win, "':");
 	wsyncup(g.win);
 	wcursyncup(g.win);
 	aug_screen_panel_update();

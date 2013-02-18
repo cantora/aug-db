@@ -61,6 +61,7 @@ static int ui_state_consume_query(struct fifo *input) {
 			g.query.run = 1;
 			brk = 1;
 			break;
+		case 0x0107:
 		case 0x08: /* ^H fall through */
 		case 0x7f: /* backspace */
 			if(g.query.n > 0)
@@ -78,6 +79,8 @@ static int ui_state_consume_query(struct fifo *input) {
 				/*aug_log("added query char: 0x%04x\n", ch);*/
 				if(g.query.n < ARRAY_SIZE(g.query.value))
 					g.query.value[g.query.n++] = ch;
+				else
+					aug_log("exceeded max query size, query will be truncated\n");
 			}
 			else
 				aug_log("dropped unprintable character 0x%04x\n", ch);
