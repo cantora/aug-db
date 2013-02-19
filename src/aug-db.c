@@ -2,6 +2,8 @@
 
 #include "err.h"
 #include "ui.h"
+#include "db.h"
+#include "util.h"
 
 #include <strings.h>
 
@@ -27,8 +29,9 @@ static int g_cmd_ch;
 static int g_freed;
 
 int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
-	const char *key;
+	const char *key, *dbpath;
 	const char default_key[] = "^R";
+	wordexp_t exp;
 
 	G_plugin = plugin;	
 	G_api = api;
@@ -37,6 +40,25 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 
 	g_freed = 0;
 	g_callbacks.user = NULL;
+
+	if(aug_conf_val(aug_plugin_name, "db", &dbpath) == 0) {
+		aug_log("db file: %s\n", dbpath);
+	} 
+	else {
+		dbpath = "~/.aug-db.sqlite";
+		aug_log("no db file configured, using default: %s\n", dbpath);
+	}
+
+	if(util_expand_path(dbpath, &exp) != 0) {
+		aug_log("failed to expand db path\n");
+		return -1; /* exp is cleaned up by expand path */
+	}
+	if(db_init(exp.we_wordv[0]) != 0) {
+		wordfree(&exp);
+		aug_log("db failed to initialize\n");
+		return -1;
+	}
+	wordfree(&exp);
 
 	if( aug_conf_val(aug_plugin_name, "key", &key) == 0) {
 		aug_log("command key: %s\n", key);
@@ -80,6 +102,7 @@ void aug_plugin_free() {
 	aug_log("free\n");
 	aug_key_unbind(g_cmd_ch);
 	ui_free();
+	db_free();
 }
 
 static void on_cmd_key(int ch, void *user) {

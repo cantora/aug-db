@@ -8,7 +8,6 @@ static struct {
 	sqlite3 *handle;
 } g;
 
-
 int db_init(const char *fpath) {
 	if(sqlite3_open(fpath, &g.handle) != SQLITE_OK) {
 		err_warn(0, "failed to open sqlite db: %s", sqlite3_errmsg(g.handle));
