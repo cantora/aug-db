@@ -7,6 +7,7 @@
 #include "fifo.h"
 #include "ui_state.h"
 #include "lock.h"
+#include "db.h"
 
 #include <pthread.h>
 #include <errno.h>
@@ -228,8 +229,7 @@ static void interact() {
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
 			if(ui_state_query_run(1) != 0) {
-				aug_log("run query\n");
-				ui_state_query_value_reset();
+				aug_log("user pressed enter\n");
 			}
 			if(amt > 0) {
 				if(render() != 0) 

@@ -61,8 +61,8 @@ static int ui_state_consume_query(struct fifo *input) {
 			g.query.run = 1;
 			brk = 1;
 			break;
-		case 0x0107:
-		case 0x08: /* ^H fall through */
+		case 0x0107: /* osx delete */
+		case 0x08: /* ^H */
 		case 0x7f: /* backspace */
 			if(g.query.n > 0)
 				g.query.n--;

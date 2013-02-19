@@ -3,5 +3,6 @@ build
 aug
 core
 libccan
+sqlite3
 .tmp
 scratch
