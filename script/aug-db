@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+
+import argparse
+import sqlite3
+import os
+
+class MissingOption(Exception):
+	pass
+
+DEFAULT_DB_PATH = '~/.aug-db.sqlite'
+SCHEMA_VERSION = 1
+
+def opt_parser():
+	parser = argparse.ArgumentParser(description='modify/view aug-db database')
+	parser.add_argument(
+		'--db', default=DEFAULT_DB_PATH, 
+		help='sqlite db file. default: %s' % (DEFAULT_DB_PATH)
+	)
+	parser.add_argument(
+		'-f', '--file', 
+		type=argparse.FileType('r'), 
+		help='input file'
+	)
+	parser.add_argument('-i', '--input', help='input text')
+	parser.add_argument('-t', '--tag', nargs='?', help='mark input with tag')
+	parser.add_argument(
+		'-v', '--verbose', action='store_true', 
+		help='print debug output.'
+	)
+
+	return parser
+
+def run(options):
+	def log(s):
+		if options.verbose:
+			print s  
+
+	log(repr(options))
+	input = None
+	if options.file:
+		input = options.file.read()
+	else:
+		input = options.input
+	
+	if not input:
+		raise MissingOption("an input file or input option must be provided")
+	
+	dbpath = os.path.expanduser(options.db)
+	log("dbpath: %s" % dbpath)
+	cx = sqlite3.connect(dbpath)
+	c = cx.cursor()
+	
+	c.execute("SELECT version FROM admin")
+	version = c.fetchone()[0]
+	log("db schema version: %r" % (version))
+	if SCHEMA_VERSION != version:
+		raise Exception("schema version mismatch. please update aug-db schema")
+	
+	log("insert input: %r" % input)
+	c.execute('INSERT INTO data (value) VALUES (?)', (input,))
+	if c.lastrowid is None:
+		raise Exception("failed to recover row id of inserted input")
+
+	#if options.tag
+	#c.execute('INSERT
+	
+if __name__ == "__main__":
+	opt_p = opt_parser()
+	options = opt_p.parse_args()
+
+	try:
+		run(options)
+	except MissingOption as e:
+		print e
+		print
+		opt_p.print_help()
+		exit(-1)
+	#except Exception as e:
+	#	print "unexpected error:"
+	#	print e
+	#	exit(-1)
+
