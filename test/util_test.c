@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <ccan/tap/tap.h>
 #include <ccan/array_size/array_size.h>
@@ -27,12 +28,41 @@ void test1() {
 	diag("----test1----\n#");
 }
 
+void test2() {
+	const char *s = "tobo";
+	char *out;
+
+	diag("++++test2++++");	
+	out = util_tal_multiply(NULL, s, "", 3);
+	ok1(strcmp("tobotobotobo", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_multiply(NULL, s, "X", 3);
+	ok1(strcmp("toboXtoboXtobo", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_multiply(NULL, s, "303", 3);
+	ok1(strcmp("tobo303tobo303tobo", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_multiply(NULL, s, "303", 0);
+	ok1(strcmp("", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_multiply(NULL, "", "303", 1);
+	ok1(strcmp("", out) == 0);
+	talloc_free(out);
+#define TEST2AMT 5
+	diag("----test2----\n#");
+}
+
 int main()
 {
 	int i, len, total_tests;
 #define TESTN(_num) {test##_num, TEST##_num##AMT}
 	struct test tests[] = {
-		TESTN(1)
+		TESTN(1),
+		TESTN(2)
 	};
 
 	len = ARRAY_SIZE(tests);

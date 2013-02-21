@@ -6,3 +6,5 @@ libccan
 sqlite3
 .tmp
 scratch
+script/init_db
+

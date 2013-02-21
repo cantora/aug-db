@@ -74,8 +74,9 @@ def run(options):
 			raise Exception("failed to recover row id of inserted input")
 	else:
 		blob_id = blob_id[0]
-		print "value already existed in db, update tags"
+		print "value already existed in db, update time and tags"
 		status = "updated tags for blob"
+		c.execute('UPDATE blobs SET updated_at = strftime("%s", "now") WHERE id = ?', (blob_id,))
 		c.execute('DELETE FROM fk_blobs_tags WHERE blob_id = ?', (blob_id,))
 	
 	for tag in options.tags:

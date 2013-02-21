@@ -1,6 +1,7 @@
 #include "db.h"
 #include "err.h"
 #include "api_calls.h"
+#include "util.h"
 
 #include <ccan/array_size/array_size.h>
 #include <sqlite3.h>
@@ -189,5 +190,40 @@ fail:
 void db_free() {
 	if(sqlite3_close(g.handle) != SQLITE_OK)
 		err_warn(0, "failed to close sqlite db: %s", sqlite3_errmsg(g.handle));
+}
+
+
+
+static void db_query_fmt(int nqueries, int ntags, char **result) {
+#define MAX_INPUTS 9
+#define FMT_SIZE(_n) (ARRAY_SIZE(sfmt)*(_n))
+	char *q_fmt, *t_add_fmt, *t_fmt;
+	char query_like[] = 
+		"(b.value LIKE '%'||?||'%' OR t.name LIKE '%'||?||'%')";
+	char tag_like[] = "(t.name LIKE ?||'%')";
+	const char fmt1[] = 
+		"SELECT DISTINCT b.value, ((%s)*10 + (%s)) AS score "
+		"FROM blobs b "
+			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id "
+			"INNER JOIN tags t ON bt.tag_id = t.id "
+		"WHERE %s AND (%s) "
+		"ORDER BY score DESC, b.updated_at DESC";
+
+	if(nqueries < 1 && ntags < 1)
+		err_panic(0, "must provide at least one query or tag");
+	if(nqueries > MAX_INPUTS || ntags > MAX_INPUTS)
+		err_panic(0, "too many input values");
+
+	q_fmt = util_tal_multiply(NULL, query_like, " AND ", nqueries);
+	t_add_fmt = util_tal_multiply(NULL, tag_like, "+", nqueries);
+	t_fmt = util_tal_multiply(NULL, tag_like, " OR ", nqueries);
+	
+	*result = talloc_asprintf(NULL, fmt1, q_fmt, t_add_fmt, q_fmt, t_fmt);
+
+	talloc_free(q_fmt);
+	talloc_free(t_add_fmt);
+	talloc_free(t_fmt);
+
+	return;
 }
 

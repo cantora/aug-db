@@ -1,5 +1,6 @@
 #include "util.h"
 #include "api_calls.h"
+#include "err.h"
 
 #include <sys/select.h>
 #include <sys/time.h>
@@ -63,3 +64,31 @@ int util_expand_path(const char *path, wordexp_t *exp) {
 	
 	return 0;
 }
+
+char *util_tal_multiply(const void *ctx, const char *s, 
+		const char *delim, size_t n) {
+	const char **arr;
+	char *result;
+	size_t i, len, dlen;
+		
+	arr = malloc( sizeof(char *)*(n+1) );
+	if(arr == NULL)
+		err_panic(0, "memory error");
+
+	for(i = 0; i < n; i++)
+		arr[i] = s;
+	arr[i] = NULL;
+
+	result = strjoin(ctx, (char **)arr, delim);
+	free(arr);
+
+	if(n > 0) {
+		dlen = strlen(delim);
+		len = strlen(result);
+		err_assert(len >= dlen);
+		result[len - dlen] = '\0';
+	}
+
+	return result;
+}
+
