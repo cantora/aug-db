@@ -22,7 +22,7 @@ def opt_parser():
 		help='input file'
 	)
 	parser.add_argument('-i', '--input', help='input text')
-	parser.add_argument('-t', '--tag', nargs='?', help='mark input with tag')
+	parser.add_argument('-t', '--tags', nargs='+', help='mark input with tag(s)')
 	parser.add_argument(
 		'-v', '--verbose', action='store_true', 
 		help='print debug output.'
@@ -51,18 +51,53 @@ def run(options):
 	c = cx.cursor()
 	
 	c.execute("SELECT version FROM admin")
-	version = c.fetchone()[0]
+	version = c.fetchone()
+	if not version:
+		raise Exception("invalid or corrupt db: no version found")
+	version = version[0]
 	log("db schema version: %r" % (version))
 	if SCHEMA_VERSION != version:
 		raise Exception("schema version mismatch. please update aug-db schema")
 	
-	log("insert input: %r" % input)
-	c.execute('INSERT INTO data (value) VALUES (?)', (input,))
-	if c.lastrowid is None:
-		raise Exception("failed to recover row id of inserted input")
+	status = "added new blob to db"
 
-	#if options.tag
-	#c.execute('INSERT
+	input = input.strip()
+	c.execute('SELECT id FROM blobs WHERE value = (?)', (input,))
+	blob_id = c.fetchone()
+	if not blob_id:
+		log("insert input: %r" % input)
+		c.execute('INSERT INTO blobs (value) VALUES (?)', (input,))
+
+		blob_id = c.lastrowid
+
+		if not blob_id:
+			raise Exception("failed to recover row id of inserted input")
+	else:
+		blob_id = blob_id[0]
+		print "value already existed in db, update tags"
+		status = "updated tags for blob"
+		c.execute('DELETE FROM fk_blobs_tags WHERE blob_id = ?', (blob_id,))
+	
+	for tag in options.tags:
+		tag = tag.strip()
+		c.execute('SELECT id FROM tags WHERE name = ?', (tag,))
+		tid = c.fetchone()
+		if not tid:
+			c.execute('INSERT INTO tags (name) VALUES (?)', (tag,) )
+			tid = c.lastrowid
+			if not tid:
+				raise Exception("failed to recover row id of inserted tag")
+		else:
+			tid = tid[0]
+
+		c.execute(
+			'INSERT INTO fk_blobs_tags (blob_id, tag_id) VALUES (?, ?)',
+			(blob_id, tid)
+		)
+	
+	cx.commit()
+
+	print status
 	
 if __name__ == "__main__":
 	opt_p = opt_parser()

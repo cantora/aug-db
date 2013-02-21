@@ -9,12 +9,12 @@
 /* SCHEMA
  *
  * version 1:
- * 		admin: INTEGER version, INTEGER last_updated
+ * 		admin: INTEGER version
  *		tags: INTEGER id, TEXT name
- *		data: INTEGER id, BLOB value
- *		data_tags: INTEGER data_id, INTEGER tag_id
+ *		blobs: INTEGER id, BLOB value
+ *		fk_blobs_tags: INTEGER blob_id, INTEGER tag_id
  */
-const char db_qm_admin[] = 
+const char db_qm1_admin[] = 
 	"CREATE TABLE admin ("
 		"version INTEGER NOT NULL ON CONFLICT ROLLBACK, "
 		"created_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
@@ -22,10 +22,10 @@ const char db_qm_admin[] =
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now'))"
 	")";
-const char db_qm_admin_populate[] = 
+const char db_qm1_admin_populate[] = 
 	"INSERT INTO admin (version) VALUES (1)";
 
-const char db_qm_tags[] = 
+const char db_qm1_tags[] = 
 	"CREATE TABLE tags ("
 		"id INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			" PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT,"
@@ -37,8 +37,8 @@ const char db_qm_tags[] =
 			"DEFAULT (strftime('%s','now'))"
 	")";
 
-const char db_qm_data[] = 
-	"CREATE TABLE data ("
+const char db_qm1_blobs[] = 
+	"CREATE TABLE blobs ("
 		"id INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			" PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT,"
 		"value BLOB NOT NULL ON CONFLICT ROLLBACK "
@@ -47,6 +47,13 @@ const char db_qm_data[] =
 			"DEFAULT (strftime('%s','now')),"
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now'))"
+	")";
+
+const char db_qm1_fk_blobs_tags[] = 
+	"CREATE TABLE fk_blobs_tags ("
+		"blob_id INTEGER NOT NULL ON CONFLICT ROLLBACK, "
+		"tag_id INTEGER NOT NULL ON CONFLICT ROLLBACK, "
+		"UNIQUE (blob_id, tag_id) ON CONFLICT ROLLBACK "
 	")";
 
 const char db_qs_version[] = "SELECT version FROM admin LIMIT 1";
@@ -102,15 +109,16 @@ static int db_migrate_v1() {
 	} while(0)
 
 	RUN_QM("BEGIN");
-	RUN_QM(db_qm_admin);
-	RUN_QM(db_qm_tags);
-	RUN_QM(db_qm_data);
-	RUN_QM(db_qm_admin_populate);
+	RUN_QM(db_qm1_admin);
+	RUN_QM(db_qm1_tags);
+	RUN_QM(db_qm1_blobs);
+	RUN_QM(db_qm1_fk_blobs_tags);
+	RUN_QM(db_qm1_admin_populate);
 	RUN_QM("COMMIT");
 #undef RUN_QM
 
 	return 0;
-	
+
 fail:
 	err_warn(0, "failed to execute query %s: %s", query, sqlite3_errmsg(g.handle));
 	return -1;	
