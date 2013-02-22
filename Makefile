@@ -8,19 +8,22 @@ CCAN_DIR		= ./libccan
 LIBCCAN			= $(CCAN_DIR)/libccan.a
 SQLITE_DIR		= ./sqlite3
 INCLUDES		= -iquote"$(AUG_DIR)/include" -I$(CCAN_DIR) -iquote"src" -I$(SQLITE_DIR)
-LIB				= -lrt
+LIB				= -lrt $(LIBCCAN)
 DEFINES			= -DAUG_DB_DEBUG
 OPTIMIZE		= -ggdb
 CXX_FLAGS		= -Wall -Wextra $(INCLUDES) $(OPTIMIZE) $(DEFINES)
 CXX_CMD			= gcc $(CXX_FLAGS)
 
 SRCS			= $(notdir $(wildcard ./src/*.c) )
-OBJECTS			= $(patsubst %.c, $(BUILD)/%.o, $(SRCS) ) $(BUILD)/sqlite3.o
+SQLITE_OBJECTS	= $(BUILD)/sqlite3.o
+CCAN_MODULES	= tap str_talloc talloc array_size
+OBJECTS			= $(patsubst %.c, $(BUILD)/%.o, $(SRCS) ) 
+OBJECTS			+=$(SQLITE_OBJECTS) 
 DEP_FLAGS		= -MMD -MP -MF $(patsubst %.o, %.d, $@)
 
 TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
-TEST_LIB		= -pthread $(LIBCCAN) -lncursesw -lpanel
+TEST_LIB		= -pthread -lncursesw -lpanel
 
 default: all
 
@@ -37,16 +40,18 @@ endef
 $(BUILD)/%.o: src/%.c
 	$(cc-template)
 
-$(BUILD)/%.o: test/%.c $(LIBCCAN)
+$(BUILD)/%.o: test/%.c 
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 
 $(CCAN_DIR):
-	git clone 'https://github.com/rustyrussell/ccan.git' $(CCAN_DIR)
+	git clone 'https://github.com/rustyrussell/ccan.git' tmp_ccan
+	cd tmp_ccan/tools && ./create-ccan-tree -b make+config ../../$(CCAN_DIR) $(CCAN_MODULES)
+	rm -rf tmp_ccan/
+	cat $(CCAN_DIR)/Makefile-ccan | sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' > $(CCAN_DIR)/tmp.mk \
+		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_DIR)/Makefile-ccan && rm $(CCAN_DIR)/tmp.mk
 
 $(LIBCCAN): $(CCAN_DIR)
-	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) -f ./tools/Makefile tools/configurator/configurator
-	$(CCAN_DIR)/tools/configurator/configurator > $(CCAN_DIR)/config.h
-	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) 
+	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC"
 
 $(SQLITE_DIR):
 	mkdir $(SQLITE_DIR)_tmp
@@ -58,8 +63,11 @@ $(SQLITE_DIR):
 $(BUILD)/%.o: $(SQLITE_DIR)/%.c $(SQLITE_DIR) 
 	$(cc-template)
 
+$(BUILD)/%.o: $(CCAN_DIR)/%/%.c $(CCAN_DIR) 
+	$(cc-template)
+
 define test-program-template
-$$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS)) $$(BUILD)/tglobals.o $$(LIBCCAN)
+$$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS)) $$(BUILD)/tglobals.o
 	$(CXX_CMD) $$+ $$(TEST_LIB) -o $$@
 
 $(1): $$(BUILD)/$(1)
