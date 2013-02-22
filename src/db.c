@@ -4,7 +4,7 @@
 #include "util.h"
 
 #include <ccan/array_size/array_size.h>
-#include <sqlite3.h>
+#include <ccan/talloc/talloc.h>
 
 #define AUG_DB_SCHEMA_VERSION 1
 /* SCHEMA
@@ -48,6 +48,8 @@ const char db_qm1_blobs[] =
 			"DEFAULT (strftime('%s','now')),"
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now'))"
+		"chosen_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
+			"DEFAULT (strftime('%s','now'))"
 	")";
 
 const char db_qm1_fk_blobs_tags[] = 
@@ -63,9 +65,9 @@ static struct {
 	sqlite3 *handle;
 } g;
 
-static int db_version(int *version);
+static int db_version(int *);
 static int db_migrate();
-
+static void db_query_fmt(size_t, size_t, char **);
 
 #define db_execute(_query, _err_msg) \
 	do { \
@@ -193,21 +195,89 @@ void db_free() {
 }
 
 
+void db_query_prepare(struct db_query *query, const char **queries, size_t nqueries,
+		const char **tags, size_t ntags) {
+	char *sql;
+	int status;
+	size_t i;
+	
+	if(nqueries < 1 && ntags < 1) {
+		sql = 
+			"SELECT DISTINCT b.value, 0 AS score "
+			"FROM blobs b " 
+			"ORDER BY b.chosen_at DESC";
+	}
+	else 
+		db_query_fmt(nqueries, ntags, &sql);
 
-static void db_query_fmt(int nqueries, int ntags, char **result) {
+	if( (status = sqlite3_prepare_v2(g.handle, sql, \
+			-1, &query->stmt, NULL)) != SQLITE_OK) {
+		err_panic(0, "failed to prepare query %s: %s", sql, sqlite3_errmsg(g.handle));
+	}
+
+	for(i = 0; i < nqueries; i++) {
+		sqlite3_bind_text(query->stmt, i+1, queries[i], -1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(query->stmt, nqueries+ntags+(i+1), 
+				queries[i], -1, SQLITE_TRANSIENT);
+	}
+	for(i = 0; i < ntags; i++) {
+		sqlite3_bind_text(query->stmt, nqueries+i+1, tags[i], 
+				-1, SQLITE_TRANSIENT);
+		sqlite3_bind_text(query->stmt, nqueries*2+ntags+(i+1), 
+				tags[i], -1, SQLITE_TRANSIENT);
+	}
+
+	if(!(nqueries < 1 && ntags < 1))
+		talloc_free(sql);
+}
+
+void db_query_free(struct db_query *query) {
+	if(sqlite3_finalize(query->stmt) != SQLITE_OK) {
+		err_warn(0, "failed to finalize statement: %s", sqlite3_errmsg(g.handle));
+	}
+}
+
+int db_query_step(struct db_query *query) {
+	int status;
+	if( (status = sqlite3_step(query->stmt)) != SQLITE_ROW ) {
+		if(status == SQLITE_DONE) {
+			sqlite3_reset(query->stmt);
+			return -1;
+		}
+		else
+			err_panic(0, "error while trying to get next row: %s", sqlite3_errmsg(g.handle));
+	}
+
+	return 0;
+}
+
+void db_query_value(struct db_query *query, char **value, size_t *size) {
+	const unsigned char *txt;
+	int n;
+	if( (txt = sqlite3_column_text(query->stmt, 0)) == NULL)
+		err_panic(0, "column data is NULL: %s", sqlite3_errmsg(g.handle));
+
+	if( (n = sqlite3_column_bytes(query->stmt, 0)) < 0)
+		err_panic(0, "value size is negative");
+
+	*size = n;
+	*value = talloc_array(NULL, char, *size);
+	memcpy(*value, txt, *size);
+}
+
+static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 #define MAX_INPUTS 9
-#define FMT_SIZE(_n) (ARRAY_SIZE(sfmt)*(_n))
 	char *q_fmt, *t_add_fmt, *t_fmt;
 	char query_like[] = 
 		"(b.value LIKE '%'||?||'%' OR t.name LIKE '%'||?||'%')";
 	char tag_like[] = "(t.name LIKE ?||'%')";
 	const char fmt1[] = 
 		"SELECT DISTINCT b.value, ((%s)*10 + (%s)) AS score "
-		"FROM blobs b "
-			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id "
+		"FROM blobs b " 
+			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id " 
 			"INNER JOIN tags t ON bt.tag_id = t.id "
 		"WHERE %s AND (%s) "
-		"ORDER BY score DESC, b.updated_at DESC";
+		"ORDER BY score DESC, b.chosen_at DESC";
 
 	if(nqueries < 1 && ntags < 1)
 		err_panic(0, "must provide at least one query or tag");
