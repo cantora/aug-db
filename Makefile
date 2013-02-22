@@ -23,7 +23,7 @@ DEP_FLAGS		= -MMD -MP -MF $(patsubst %.o, %.d, $@)
 
 TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
-TEST_LIB		= -pthread -lncursesw -lpanel
+TEST_LIB		= -pthread -lncursesw -lpanel $(LIB)
 
 default: all
 
@@ -40,7 +40,7 @@ endef
 $(BUILD)/%.o: src/%.c
 	$(cc-template)
 
-$(BUILD)/%.o: test/%.c 
+$(BUILD)/%.o: test/%.c $(LIBCCAN)
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 
 $(CCAN_DIR):
@@ -63,11 +63,8 @@ $(SQLITE_DIR):
 $(BUILD)/%.o: $(SQLITE_DIR)/%.c $(SQLITE_DIR) 
 	$(cc-template)
 
-$(BUILD)/%.o: $(CCAN_DIR)/%/%.c $(CCAN_DIR) 
-	$(cc-template)
-
 define test-program-template
-$$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS)) $$(BUILD)/tglobals.o
+$$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS)) $$(BUILD)/tglobals.o $$(LIBCCAN)
 	$(CXX_CMD) $$+ $$(TEST_LIB) -o $$@
 
 $(1): $$(BUILD)/$(1)
