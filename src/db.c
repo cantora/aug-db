@@ -42,13 +42,13 @@ const char db_qm1_tags[] =
 const char db_qm1_blobs[] = 
 	"CREATE TABLE blobs ("
 		"id INTEGER NOT NULL ON CONFLICT ROLLBACK "
-			" PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT,"
+			"PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT,"
 		"value BLOB NOT NULL ON CONFLICT ROLLBACK "
-			" UNIQUE ON CONFLICT ROLLBACK,"
+			"UNIQUE ON CONFLICT ROLLBACK, "
 		"created_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
-			"DEFAULT (strftime('%s','now')),"
+			"DEFAULT (strftime('%s','now')), "
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
-			"DEFAULT (strftime('%s','now'))"
+			"DEFAULT (strftime('%s','now')), "
 		"chosen_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now'))"
 	")";
@@ -337,7 +337,7 @@ static void db_tag_blob(int bid, const char **tags, size_t ntags) {
 	size_t i;
 	sqlite3_stmt *stmt;
 	const char *sql = 
-		"INSERT INTO fk_blobs_tags (blob_id, tag_id)"
+		"INSERT INTO fk_blobs_tags (blob_id, tag_id) "
 		"VALUES (?, ?)";
 
 	if(ntags < 1)
@@ -351,8 +351,8 @@ static void db_tag_blob(int bid, const char **tags, size_t ntags) {
 
 		tid = db_find_or_create_tag(tags[i]);
 		DB_BIND_INT(stmt, 2, tid);
-		if(db_stmt_step(stmt) != SQLITE_DONE)
-			err_panic(0, "expected SQLITE_DONE");
+		if(db_stmt_step(stmt) == 0)
+			err_panic(0, "expected SQLITE_DONE from %s: ", sql);
 	}
 
 	DB_STMT_FINALIZE(stmt);
@@ -381,6 +381,7 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 	else 
 		db_query_fmt(nqueries, ntags, &sql);
 
+	aug_log("db: prepare sql %s\n", sql);
 	DB_STMT_PREP(sql, &query->stmt);
 
 #define DB_QP_BIND(_idx, _ptr) \
@@ -434,7 +435,7 @@ void db_query_value(struct db_query *query, char **value, size_t *size) {
 
 static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 #define MAX_INPUTS 9
-	char *q_fmt, *t_add_fmt, *t_fmt;
+	char *q_score_fmt, *q_fmt, *t_score_fmt, *t_fmt;
 	char query_like[] = 
 		"(b.value LIKE '%'||?||'%' OR t.name LIKE '%'||?||'%')";
 	char tag_like[] = "(t.name LIKE ?||'%')";
@@ -451,15 +452,37 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 	if(nqueries > MAX_INPUTS || ntags > MAX_INPUTS)
 		err_panic(0, "too many input values");
 
-	q_fmt = util_tal_multiply(NULL, query_like, " AND ", nqueries);
-	t_add_fmt = util_tal_multiply(NULL, tag_like, "+", nqueries);
-	t_fmt = util_tal_multiply(NULL, tag_like, " OR ", nqueries);
-	
-	*result = talloc_asprintf(NULL, fmt1, q_fmt, t_add_fmt, q_fmt, t_fmt);
+	if(nqueries > 0) {
+		q_score_fmt = util_tal_multiply(NULL, query_like, " AND ", nqueries);
+		q_fmt = q_score_fmt;
+	}
+	else {
+		q_score_fmt = "0";
+		q_fmt = "1";
+	}
+	aug_log("db: q_score_fmt => %s\n", q_score_fmt);
+	aug_log("db: q_fmt => %s\n", q_fmt);
 
-	talloc_free(q_fmt);
-	talloc_free(t_add_fmt);
-	talloc_free(t_fmt);
+	if(ntags > 0) {
+		t_score_fmt = util_tal_multiply(NULL, tag_like, "+", ntags);
+		t_fmt = util_tal_multiply(NULL, tag_like, " OR ", ntags);
+	}
+	else {
+		t_score_fmt = "0";
+		t_fmt = "1";
+	}
+	aug_log("db: t_score_fmt => %s\n", t_score_fmt);
+	aug_log("db: t_fmt => %s\n", t_fmt);
+	
+	*result = talloc_asprintf(NULL, fmt1, q_score_fmt, t_score_fmt, q_fmt, t_fmt);
+
+	if(nqueries > 0) 
+		talloc_free(q_score_fmt);
+	
+	if(ntags > 0) {
+		talloc_free(t_score_fmt);
+		talloc_free(t_fmt);
+	}
 
 	return;
 }
