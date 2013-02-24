@@ -5,6 +5,7 @@
 
 #include <ccan/array_size/array_size.h>
 #include <ccan/talloc/talloc.h>
+#include <ccan/str/str.h>
 
 #define AUG_DB_SCHEMA_VERSION 1
 /* SCHEMA
@@ -56,7 +57,7 @@ const char db_qm1_fk_blobs_tags[] =
 	"CREATE TABLE fk_blobs_tags ("
 		"blob_id INTEGER NOT NULL ON CONFLICT ROLLBACK, "
 		"tag_id INTEGER NOT NULL ON CONFLICT ROLLBACK, "
-		"UNIQUE (blob_id, tag_id) ON CONFLICT ROLLBACK "
+		"UNIQUE (blob_id, tag_id) ON CONFLICT IGNORE "
 	")";
 
 const char db_qs_version[] = "SELECT version FROM admin LIMIT 1";
@@ -69,17 +70,19 @@ static int db_version(int *);
 static int db_migrate();
 static void db_query_fmt(size_t, size_t, char **);
 
-#define db_execute(_query, _err_msg) \
+#define DB_EXECUTE(_query, _err_msg) \
 	do { \
 		if(sqlite3_exec(g.handle, _query, NULL, NULL, NULL) != SQLITE_OK) { \
 			err_panic(0, _err_msg); \
 		} \
 	} while(0)
 
-#define db_begin() \
-	db_execute("BEGIN", "failed to begin db transaction")
-#define db_commit() \
-	db_execute("COMMIT", "failed to commit db transaction")
+#define DB_BEGIN() \
+	DB_EXECUTE("BEGIN", "failed to begin db transaction")
+#define DB_COMMIT() \
+	DB_EXECUTE("COMMIT", "failed to commit db transaction")
+#define DB_ROLLBACK() \
+	DB_EXECUTE("ROLLBACK", "failed to rollback db transaction")
 
 int db_init(const char *fpath) {
 	if(sqlite3_open(fpath, &g.handle) != SQLITE_OK) {
@@ -107,11 +110,14 @@ static int db_migrate_v1() {
 	do { \
 		if(sqlite3_exec(g.handle, _query, NULL, NULL, NULL) != SQLITE_OK) { \
 			query = _query; \
-			goto fail; \
+			goto rollback; \
 		} \
 	} while(0)
 
-	RUN_QM("BEGIN");
+	if(sqlite3_exec(g.handle, "BEGIN", NULL, NULL, NULL) != SQLITE_OK) {
+		query = "BEGIN";
+		goto fail;
+	}
 	RUN_QM(db_qm1_admin);
 	RUN_QM(db_qm1_tags);
 	RUN_QM(db_qm1_blobs);
@@ -122,6 +128,9 @@ static int db_migrate_v1() {
 
 	return 0;
 
+rollback:
+	if(sqlite3_exec(g.handle, "ROLLBACK", NULL, NULL, NULL) != SQLITE_OK)
+		err_warn(0, "failed to rollback: %s", sqlite3_errmsg(g.handle));
 fail:
 	err_warn(0, "failed to execute query %s: %s", query, sqlite3_errmsg(g.handle));
 	return -1;	
@@ -151,15 +160,13 @@ static int db_migrate() {
 	return 0;
 }
 
-/* #define SELECT_VAL(_hndl, _sql, _nbyte, _pp_stmt_ptr)  */
-	
 static int db_version(int *version) {
 	int status;
 	sqlite3_stmt *stmt;
 
 	if( (status = sqlite3_prepare_v2(g.handle, db_qs_version, \
 			ARRAY_SIZE(db_qs_version), &stmt, NULL)) != SQLITE_OK) {
-		if(status == 1) {
+		if(status == SQLITE_ERROR) { /* sql error => the table doesnt exist */
 			*version = 0;
 			goto finalize;
 		}
@@ -195,10 +202,174 @@ void db_free() {
 }
 
 
+#define DB_STMT_PREP(_sql, _stmt_pptr) \
+	do { \
+		if(sqlite3_prepare_v2(g.handle, _sql, -1, _stmt_pptr, NULL) != SQLITE_OK) { \
+			err_panic(0, "failed to prepare %s: %s", \
+							_sql, sqlite3_errmsg(g.handle)); \
+		} \
+	} while(0)
+
+#define DB_STMT_FINALIZE(_stmt_ptr) \
+	do { \
+		if(sqlite3_finalize(_stmt_ptr) != SQLITE_OK) { \
+			err_warn(0, "failed to finalize statement: %s", sqlite3_errmsg(g.handle)); \
+		} \
+	} while(0) 
+
+#define DB_STMT_RESET(_stmt_ptr) \
+	do { \
+		if(sqlite3_reset(_stmt_ptr) != SQLITE_OK) { \
+			err_panic(0, "expected reset to return SQLITE_OK: %s", sqlite3_errmsg(g.handle)); \
+		} \
+	} while(0)
+
+static int db_stmt_step(sqlite3_stmt *stmt) {
+	int status;
+
+	if( (status = sqlite3_step(stmt)) != SQLITE_ROW) {
+		if(status == SQLITE_DONE)
+			return -1;
+		else 
+			err_panic(0, "failed to step: %s", sqlite3_errmsg(g.handle));
+	}
+	
+	return 0;
+}
+
+#define DB_STMT_EXEC(_stmt_ptr) \
+	do { \
+		if(db_stmt_step(_stmt_ptr) == 0) { \
+			err_panic(0, "expected SQLITE_DONE"); \
+		} \
+		DB_STMT_FINALIZE(_stmt_ptr); \
+	} while(0)
+
+#define DB_BIND_BUF(_type, _stmt_ptr, _idx, _data, _len, _dtor_type) \
+	do { \
+		if(sqlite3_bind_ ## _type (_stmt_ptr, _idx, _data, _len, _dtor_type) != SQLITE_OK) { \
+			err_panic(0, "failed to bind " stringify(_type) ": %s", sqlite3_errmsg(g.handle)); \
+		} \
+	} while(0) 
+
+#define DB_BIND_BUF_STATIC(_type, _stmt_ptr, _idx, _data, _len) \
+	DB_BIND_BUF(_type, _stmt_ptr, _idx, _data, _len, SQLITE_STATIC)
+
+#define DB_BIND_BLOB(_stmt_ptr, _idx, _data, _len) \
+	DB_BIND_BUF_STATIC(blob, _stmt_ptr, _idx, _data, _len)
+
+#define DB_BIND_TEXT(_stmt_ptr, _idx, _data) \
+	DB_BIND_BUF_STATIC(text, _stmt_ptr, _idx, _data, -1)
+
+#define DB_BIND_INT(_stmt_ptr, _idx, _val) \
+	do { \
+		if(sqlite3_bind_int(_stmt_ptr, _idx, _val) != SQLITE_OK) { \
+			err_panic(0, "failed to bind int: %s", sqlite3_errmsg(g.handle)); \
+		} \
+	} while(0) 
+
+static int db_blob_id(const void *data, size_t bytes) {
+	int id;
+	sqlite3_stmt *stmt;
+	
+	id = 0;
+	DB_STMT_PREP("SELECT id FROM blobs WHERE value = ?", &stmt);
+	DB_BIND_BLOB(stmt, 1, data, bytes);
+	if(db_stmt_step(stmt) != 0) 
+		goto done; /* no rows in the blobs table */
+
+	id = sqlite3_column_int(stmt, 0);
+done:
+	DB_STMT_FINALIZE(stmt);
+	return id;
+}
+
+/* this function should be run within a transaction */
+static int db_find_or_create_blob(const void *data, size_t bytes) {
+	sqlite3_stmt *stmt;
+	int bid;
+
+	if( (bid = db_blob_id(data, bytes)) > 0) {
+		return bid;
+	}
+	
+	DB_STMT_PREP("INSERT INTO blobs (value) VALUES (?)", &stmt);
+	DB_BIND_BLOB(stmt, 1, data, bytes);
+	DB_STMT_EXEC(stmt);
+
+	return bid;
+}
+
+static int db_tag_id(const char *tag) {
+	sqlite3_stmt *stmt;
+	int id;
+
+	id = 0;
+	DB_STMT_PREP("SELECT id FROM tags WHERE name = ?", &stmt);
+	DB_BIND_TEXT(stmt, 1, tag);
+	if(db_stmt_step(stmt) != 0) 
+		goto done; /* no rows in the tags table */
+
+	id = sqlite3_column_int(stmt, 0);
+done:
+	DB_STMT_FINALIZE(stmt);
+	return id;
+}
+
+/* this should be run within a transaction */
+static int db_find_or_create_tag(const char *tag) {
+	int tid;
+	sqlite3_stmt *stmt;
+
+	if( (tid = db_tag_id(tag)) > 0) {
+		return tid;
+	}
+
+	DB_STMT_PREP("INSERT INTO tags (name) VALUES (?)", &stmt);
+	DB_BIND_TEXT(stmt, 1, tag);
+	DB_STMT_EXEC(stmt);
+
+	return tid;
+}
+
+static void db_tag_blob(int bid, const char **tags, size_t ntags) {
+	int tid;
+	size_t i;
+	sqlite3_stmt *stmt;
+	const char *sql = 
+		"INSERT INTO fk_blobs_tags (blob_id, tag_id)"
+		"VALUES (?, ?)";
+
+	if(ntags < 1)
+		return;
+
+	DB_STMT_PREP(sql, &stmt);
+	DB_BIND_INT(stmt, 1, bid);
+	for(i = 0; i < ntags; i++) {
+		if(i > 0)
+			DB_STMT_RESET(stmt);
+
+		tid = db_find_or_create_tag(tags[i]);
+		DB_BIND_INT(stmt, 2, tid);
+		if(db_stmt_step(stmt) != SQLITE_DONE)
+			err_panic(0, "expected SQLITE_DONE");
+	}
+
+	DB_STMT_FINALIZE(stmt);
+}
+
+void db_add(const void *data, size_t bytes, const char **tags, size_t ntags) {
+	int bid;
+	
+	DB_BEGIN();
+	bid = db_find_or_create_blob(data, bytes);
+	db_tag_blob(bid, tags, ntags);
+	DB_COMMIT();
+}
+
 void db_query_prepare(struct db_query *query, const char **queries, size_t nqueries,
 		const char **tags, size_t ntags) {
 	char *sql;
-	int status;
 	size_t i;
 	
 	if(nqueries < 1 && ntags < 1) {
@@ -210,45 +381,41 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 	else 
 		db_query_fmt(nqueries, ntags, &sql);
 
-	if( (status = sqlite3_prepare_v2(g.handle, sql, \
-			-1, &query->stmt, NULL)) != SQLITE_OK) {
-		err_panic(0, "failed to prepare query %s: %s", sql, sqlite3_errmsg(g.handle));
-	}
+	DB_STMT_PREP(sql, &query->stmt);
+
+#define DB_QP_BIND(_idx, _ptr) \
+	DB_BIND_BUF(text, query->stmt, _idx, _ptr, -1, SQLITE_TRANSIENT)
 
 	for(i = 0; i < nqueries; i++) {
-		sqlite3_bind_text(query->stmt, i+1, queries[i], -1, SQLITE_TRANSIENT);
-		sqlite3_bind_text(query->stmt, nqueries+ntags+(i+1), 
-				queries[i], -1, SQLITE_TRANSIENT);
+		DB_QP_BIND(i+1, queries[i]);
+		DB_QP_BIND(nqueries+ntags+(i+1), queries[i]);
 	}
 	for(i = 0; i < ntags; i++) {
-		sqlite3_bind_text(query->stmt, nqueries+i+1, tags[i], 
-				-1, SQLITE_TRANSIENT);
-		sqlite3_bind_text(query->stmt, nqueries*2+ntags+(i+1), 
-				tags[i], -1, SQLITE_TRANSIENT);
+		DB_QP_BIND(nqueries+i+1, tags[i]);
+		DB_QP_BIND(nqueries*2+ntags+(i+1), tags[i]);
 	}
+#undef DB_QP_BIND
 
 	if(!(nqueries < 1 && ntags < 1))
 		talloc_free(sql);
 }
 
 void db_query_free(struct db_query *query) {
-	if(sqlite3_finalize(query->stmt) != SQLITE_OK) {
-		err_warn(0, "failed to finalize statement: %s", sqlite3_errmsg(g.handle));
-	}
+	DB_STMT_FINALIZE(query->stmt);
+	query->stmt = NULL;
 }
 
 int db_query_step(struct db_query *query) {
-	int status;
-	if( (status = sqlite3_step(query->stmt)) != SQLITE_ROW ) {
-		if(status == SQLITE_DONE) {
-			sqlite3_reset(query->stmt);
-			return -1;
-		}
-		else
-			err_panic(0, "error while trying to get next row: %s", sqlite3_errmsg(g.handle));
+	if(db_stmt_step(query->stmt) != 0) {
+		db_query_reset(query);
+		return -1;
 	}
 
 	return 0;
+}
+
+void db_query_reset(struct db_query *query) {
+	DB_STMT_RESET(query->stmt);
 }
 
 void db_query_value(struct db_query *query, char **value, size_t *size) {
