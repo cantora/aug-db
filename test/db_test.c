@@ -41,7 +41,7 @@ void test1() {
 
 #define ADD_TEST_ENTRY(_idx) \
 	db_add( \
-		TEST_ENTRY_DATA(_idx), ARRAY_SIZE( TEST_ENTRY_DATA(_idx) ), \
+		TEST_ENTRY_DATA(_idx), ARRAY_SIZE( TEST_ENTRY_DATA(_idx) )-1, \
 		TEST_ENTRY_TAGS(_idx), ARRAY_SIZE( TEST_ENTRY_TAGS(_idx) ) \
 	)
 
@@ -82,11 +82,12 @@ void test2() {
 		db_query_value(&q, &value, &size);
 		printf("#value: ");
 		print_blob(value, size);
+		printf("\n");
 		talloc_free(value);
 		count++;
 	}
 
-	ok1(count == 0);	
+	ok1(count == 3);
 	db_query_free(&q);
 
 #define TEST2AMT 1
@@ -108,10 +109,6 @@ void test3() {
 	db_query_prepare(&q, queries, ARRAY_SIZE(queries), tags, ARRAY_SIZE(tags));
 	count = 0;
 	while(db_query_step(&q) == 0) {
-		db_query_value(&q, &value, &size);
-		printf("#value: ");
-		print_blob(value, size);
-		talloc_free(value);
 		count++;
 	}
 
@@ -123,13 +120,46 @@ void test3() {
 	db_free();
 }
 
+
+void test4() {
+	const char *queries[] = {"gues"};
+	const char *tags[] = {"cmdlin"};
+	struct db_query q;
+	char *value;
+	size_t size;
+	int count;
+
+	db_init(fn);
+	diag("++++test4++++");	
+
+	db_query_prepare(&q, queries, ARRAY_SIZE(queries), tags, ARRAY_SIZE(tags));
+	count = 0;
+	while(db_query_step(&q) == 0) {
+		db_query_value(&q, &value, &size);
+		printf("#value: ");
+		print_blob(value, size);
+		printf("\n");
+		talloc_free(value);
+		count++;
+	}
+
+	ok1(count == 1);	
+	db_query_free(&q);
+
+#define TEST4AMT 1
+	diag("----test4----\n#");
+	db_free();
+}
+
 int main()
 {
 	int i, len, total_tests;
 #define TESTN(_num) {test##_num, TEST##_num##AMT}
 	struct test tests[] = {
 		TESTN(1),	
-		TESTN(2)
+		TESTN(2),
+		TESTN(3),
+		TESTN(4)
 	};
 
 	len = ARRAY_SIZE(tests);

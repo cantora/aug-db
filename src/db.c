@@ -50,7 +50,7 @@ const char db_qm1_blobs[] =
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now')), "
 		"chosen_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
-			"DEFAULT (strftime('%s','now'))"
+			"DEFAULT (0)"
 	")";
 
 const char db_qm1_fk_blobs_tags[] = 
@@ -68,6 +68,7 @@ static struct {
 
 static int db_version(int *);
 static int db_migrate();
+
 static void db_query_fmt(size_t, size_t, char **);
 
 #define DB_EXECUTE(_query, _err_msg) \
@@ -297,6 +298,7 @@ static int db_find_or_create_blob(const void *data, size_t bytes) {
 	DB_BIND_BLOB(stmt, 1, data, bytes);
 	DB_STMT_EXEC(stmt);
 
+	bid = sqlite3_last_insert_rowid(g.handle);
 	return bid;
 }
 
@@ -329,6 +331,7 @@ static int db_find_or_create_tag(const char *tag) {
 	DB_BIND_TEXT(stmt, 1, tag);
 	DB_STMT_EXEC(stmt);
 
+	tid = sqlite3_last_insert_rowid(g.handle);
 	return tid;
 }
 
@@ -339,6 +342,8 @@ static void db_tag_blob(int bid, const char **tags, size_t ntags) {
 	const char *sql = 
 		"INSERT INTO fk_blobs_tags (blob_id, tag_id) "
 		"VALUES (?, ?)";
+
+	err_assert(bid > 0);
 
 	if(ntags < 1)
 		return;
@@ -388,12 +393,12 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 	DB_BIND_BUF(text, query->stmt, _idx, _ptr, -1, SQLITE_TRANSIENT)
 
 	for(i = 0; i < nqueries; i++) {
+		aug_log("bind %s to ?(%d)\n", queries[i], i+1);
 		DB_QP_BIND(i+1, queries[i]);
-		DB_QP_BIND(nqueries+ntags+(i+1), queries[i]);
 	}
 	for(i = 0; i < ntags; i++) {
+		aug_log("bind %s to ?(%d)\n", tags[i], nqueries+i+1);
 		DB_QP_BIND(nqueries+i+1, tags[i]);
-		DB_QP_BIND(nqueries*2+ntags+(i+1), tags[i]);
 	}
 #undef DB_QP_BIND
 
@@ -434,11 +439,12 @@ void db_query_value(struct db_query *query, char **value, size_t *size) {
 }
 
 static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
-#define MAX_INPUTS 9
+#define DB_QUERY_MAX_INPUTS 9 /* max 9 queries and 9 tags */
 	char *q_score_fmt, *q_fmt, *t_score_fmt, *t_fmt;
+	size_t i;
 	char query_like[] = 
-		"(b.value LIKE '%'||?||'%' OR t.name LIKE '%'||?||'%')";
-	char tag_like[] = "(t.name LIKE ?||'%')";
+		"(b.value LIKE '%%'||?%03d||'%%' OR t.name LIKE '%%'||?%03d||'%%')";
+	char tag_like[] = "(t.name LIKE '%%'||?%03d||'%%')";
 	const char fmt1[] = 
 		"SELECT DISTINCT b.value, ((%s)*10 + (%s)) AS score "
 		"FROM blobs b " 
@@ -449,12 +455,19 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 
 	if(nqueries < 1 && ntags < 1)
 		err_panic(0, "must provide at least one query or tag");
-	if(nqueries > MAX_INPUTS || ntags > MAX_INPUTS)
+	if(nqueries > DB_QUERY_MAX_INPUTS || ntags > DB_QUERY_MAX_INPUTS)
 		err_panic(0, "too many input values");
 
 	if(nqueries > 0) {
-		q_score_fmt = util_tal_multiply(NULL, query_like, " AND ", nqueries);
+		char **list = talloc_array(NULL, char *, nqueries+1);
+		list[nqueries] = NULL;
+		for(i = 0; i < nqueries; i++) {
+			list[i] = talloc_asprintf(list, query_like, i+1, i+1);
+		}
+		
+		q_score_fmt = util_tal_join(NULL, list, " AND ");
 		q_fmt = q_score_fmt;
+		talloc_free(list); /* asprintf's are freed here too */
 	}
 	else {
 		q_score_fmt = "0";
@@ -464,8 +477,15 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 	aug_log("db: q_fmt => %s\n", q_fmt);
 
 	if(ntags > 0) {
-		t_score_fmt = util_tal_multiply(NULL, tag_like, "+", ntags);
-		t_fmt = util_tal_multiply(NULL, tag_like, " OR ", ntags);
+		char **list = talloc_array(NULL, char *, ntags+1);
+		list[ntags] = NULL;
+		for(i = 0; i < ntags; i++) {
+			list[i] = talloc_asprintf(list, tag_like, nqueries + i+1);
+		}
+
+		t_score_fmt = util_tal_join(NULL, list, "+");
+		t_fmt = util_tal_join(NULL, list, " OR ");
+		talloc_free(list); /* asprintf's are freed here too */
 	}
 	else {
 		t_score_fmt = "0";
