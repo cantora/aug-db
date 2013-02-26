@@ -65,11 +65,26 @@ int util_expand_path(const char *path, wordexp_t *exp) {
 	return 0;
 }
 
+char *util_tal_join(const void *ctx, char **strings, 
+		const char *delim) {
+	char *result;
+	size_t len, dlen;
+	
+	result = strjoin(ctx, strings, delim);
+	
+	dlen = strlen(delim);
+	len = strlen(result);
+	if(len >= dlen) /* get rid of trailing delim */
+		result[len - dlen] = '\0';
+
+	return result;
+}
+
 char *util_tal_multiply(const void *ctx, const char *s, 
 		const char *delim, size_t n) {
 	const char **arr;
 	char *result;
-	size_t i, len, dlen;
+	size_t i;
 		
 	arr = malloc( sizeof(char *)*(n+1) );
 	if(arr == NULL)
@@ -79,15 +94,8 @@ char *util_tal_multiply(const void *ctx, const char *s,
 		arr[i] = s;
 	arr[i] = NULL;
 
-	result = strjoin(ctx, (char **)arr, delim);
+	result = util_tal_join(ctx, (char **)arr, delim);
 	free(arr);
-
-	if(n > 0) {
-		dlen = strlen(delim);
-		len = strlen(result);
-		err_assert(len >= dlen);
-		result[len - dlen] = '\0';
-	}
 
 	return result;
 }

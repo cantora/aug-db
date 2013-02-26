@@ -29,10 +29,40 @@ void test1() {
 }
 
 void test2() {
+	char *s1[] = {"tobo", "hobo", "globo", NULL};
+	char *s2[] = {NULL};
+	char *s3[] = {"tobo", NULL};
+	char *s4[] = {"tobo", "gojo", NULL};	
+	char *out;
+
+	diag("++++test2++++");
+	
+	out = util_tal_join(NULL, s1, " -> ");
+	ok1(strcmp("tobo -> hobo -> globo", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_join(NULL, s2, " x ");
+	ok1(strcmp("", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_join(NULL, s3, " x ");
+	ok1(strcmp("tobo", out) == 0);
+	talloc_free(out);
+
+	out = util_tal_join(NULL, s4, " x ");
+	ok1(strcmp("tobo x gojo", out) == 0);
+	talloc_free(out);
+
+#define TEST2AMT 4
+	diag("----test2----\n#");
+}
+
+
+void test3() {
 	const char *s = "tobo";
 	char *out;
 
-	diag("++++test2++++");	
+	diag("++++test3++++");	
 	out = util_tal_multiply(NULL, s, "", 3);
 	ok1(strcmp("tobotobotobo", out) == 0);
 	talloc_free(out);
@@ -52,9 +82,9 @@ void test2() {
 	out = util_tal_multiply(NULL, "", "303", 1);
 	ok1(strcmp("", out) == 0);
 	talloc_free(out);
-#define TEST2AMT 5
-	diag("----test2----\n#");
-}
+#define TEST3AMT 5
+	diag("----test3----\n#");
+} 
 
 int main()
 {
@@ -62,7 +92,8 @@ int main()
 #define TESTN(_num) {test##_num, TEST##_num##AMT}
 	struct test tests[] = {
 		TESTN(1),
-		TESTN(2)
+		TESTN(2),
+		TESTN(3)
 	};
 
 	len = ARRAY_SIZE(tests);

@@ -8,6 +8,8 @@
 int util_usleep(int secs, int usecs);
 int util_thread_init();
 int util_expand_path(const char *path, wordexp_t *exp);
+char *util_tal_join(const void *ctx, char **strings, 
+		const char *delim);
 char *util_tal_multiply(const void *ctx, const char *s, 
 		const char *delim, size_t n);
 
