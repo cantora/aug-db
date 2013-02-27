@@ -2,6 +2,7 @@
 #define AUG_DB_DB_H
 
 #include <string.h>
+#include <stdint.h>
 #include <sqlite3.h>
 #include <ccan/talloc/talloc.h>
 
@@ -21,7 +22,7 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 int db_query_step(struct db_query *query);
 
 /* value will be set to a talloc'd buffer of size *size */
-void db_query_value(struct db_query *query, char **value, size_t *size);
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size);
 void db_query_reset(struct db_query *query);
 void db_query_free(struct db_query *query);
 

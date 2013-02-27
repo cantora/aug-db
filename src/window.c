@@ -11,6 +11,7 @@ static struct {
 	int off;
 	WINDOW *win;
 	WINDOW *search_win;
+	WINDOW *result_win;
 } g;
 
 static void window_reset_vars();
@@ -81,6 +82,9 @@ int window_start() {
 	g.search_win = derwin(g.win, 1, cols-2, 0, 0);
 	if(g.search_win == NULL) 
 		err_panic(0, "g.search_win was null\n");
+	g.result_win = derwin(g.win, rows-2-1, cols-2, 1, 0);
+	if(g.result_win == NULL) 
+		err_panic(0, "g.search_win was null\n");
 	
 	if(keypad(stdscr, 1) == ERR)
 		err_panic(0, "failed to enable keypad");
@@ -88,6 +92,7 @@ int window_start() {
 	aug_unlock_screen();
 
 	g.off = 0;
+	ui_state_query_result_reset();
 	WINDOW_UNLOCK(status);
 
 	return 0;
@@ -102,7 +107,9 @@ void window_end() {
 	aug_lock_screen();
 	if(keypad(stdscr, 0) == ERR)
 		err_panic(0, "failed to disable keypad");
-
+	
+	if(delwin(g.result_win) == ERR)
+		err_panic(0, "failed to delete window\n");
 	if(delwin(g.search_win) == ERR)
 		err_panic(0, "failed to delete window\n");
 	if(delwin(g.win) == ERR)
@@ -138,38 +145,72 @@ void window_refresh() {
 
 static void window_render_query() {
 	const int *query;
-	size_t n,i;
-	int rows, cols, x, y;
+	uint8_t *result;
+	size_t n, i, rsize;
+	int j, rows, cols, x, y;
 
 	err_assert(g.win != NULL);
 
 	ui_state_query_value(&query, &n);
 	aug_lock_screen();
+
 	if(werase(g.search_win) == ERR)
 		err_panic(0, "failed to erase window");
 	if(wmove(g.search_win, 0, 0) == ERR)
 		err_panic(0, "failed to move cursor");
-
+	getmaxyx(g.search_win, rows, cols);
 	WPRINTW(g.search_win, "(search)`");
 	if(n > 0) 
 		for(i = 0; i < n; i++) {
-			getmaxyx(g.search_win, rows, cols);
 			getyx(g.search_win, y, x);
 			/* if x >= cols-1-2 then the WPRINTW will fail */
 			if(y >= rows || x >= (cols-1-2) ) {
 				aug_log("exceeded window size of %d,%d\n", rows, cols);
-				goto update;
+				goto finish_search_win;
 			}
 			WADDCH(g.search_win, query[i]);
 		}
+finish_search_win:
+	WPRINTW(g.search_win, "':");
+
+	if(werase(g.result_win) == ERR)
+		err_panic(0, "failed to erase window");
+	if(wmove(g.result_win, 0, 0) == ERR)
+		err_panic(0, "failed to move cursor");
+
+	aug_log("window: render results\n");
+	getmaxyx(g.result_win, rows, cols);
+	while(ui_state_query_result_next(&result, &rsize) == 0) {
+		aug_log("window: render query result\n");
+		getyx(g.result_win, y, x); 
+		if(y >= rows - 1)
+			goto update;
+
+		for(j = 0; j < cols; j++) {
+			WADDCH(g.result_win, '-');
+		}
+
+		for(i = 0; i < rsize; i++) {
+			getyx(g.result_win, y, x); 
+			if(y >= rows - 1 && x >= cols - 4) { 
+				WPRINTW(g.result_win, "..."); 
+				goto update; 
+			}
+			WADDCH(g.result_win, result[i]);
+		}
+		waddch(g.result_win, '\n');
+
+		talloc_free(result);
+	} /* while(query results) */
 
 update:
-	WPRINTW(g.search_win, "':");
-	wsyncup(g.win);
-	wcursyncup(g.win);
+	wsyncup(g.result_win);
+	wcursyncup(g.result_win);
+	wsyncup(g.search_win);
+	wcursyncup(g.search_win);
 	aug_screen_panel_update();
 	aug_screen_doupdate();
-
+	
 	aug_unlock_screen();	
 }
 

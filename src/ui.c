@@ -53,11 +53,12 @@ int ui_init() {
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
 		goto cleanup_mtx;
+
+	ui_state_init();
 	if(window_init() != 0)
 		goto cleanup_cond;
 
 	fifo_init(&g.input_pipe, g.input_buf, sizeof(int), ARRAY_SIZE(g.input_buf));
-	ui_state_init();
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
@@ -99,6 +100,7 @@ void ui_free() {
 	aug_log("ui thread dead\n");
 
 	window_free();
+	ui_state_free();
 	if( (status = pthread_cond_destroy(&g.wakeup)) != 0)
 		err_warn(status, "failed to destroy ui condition");
 	if( (status = pthread_mutex_destroy(&g.mtx)) != 0)

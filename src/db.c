@@ -424,7 +424,7 @@ void db_query_reset(struct db_query *query) {
 	DB_STMT_RESET(query->stmt);
 }
 
-void db_query_value(struct db_query *query, char **value, size_t *size) {
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size) {
 	const unsigned char *txt;
 	int n;
 	if( (txt = sqlite3_column_text(query->stmt, 0)) == NULL)
@@ -434,7 +434,7 @@ void db_query_value(struct db_query *query, char **value, size_t *size) {
 		err_panic(0, "value size is negative");
 
 	*size = n;
-	*value = talloc_array(NULL, char, *size);
+	*value = talloc_array(NULL, uint8_t, *size);
 	memcpy(*value, txt, *size);
 }
 
