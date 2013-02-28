@@ -208,6 +208,8 @@ update:
 	wcursyncup(g.result_win);
 	wsyncup(g.search_win);
 	wcursyncup(g.search_win);
+	if(touchwin(g.search_win) == ERR)
+		err_panic(0, "failed to touch searchwin");
 	aug_screen_panel_update();
 	aug_screen_doupdate();
 	
