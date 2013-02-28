@@ -61,7 +61,7 @@ def run(options):
 	
 	status = "added new blob to db"
 
-	input = input.strip()
+	input = input.strip().decode('utf-8')
 	c.execute('SELECT id FROM blobs WHERE value = (?)', (input,))
 	blob_id = c.fetchone()
 	if not blob_id:
