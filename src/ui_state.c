@@ -9,34 +9,25 @@
 static struct {
 	ui_state_name current;
 	struct {
-		int prev_nl;
 		int value[1024];
 		size_t n;
 		int run;
+		int run_ch;
 		struct db_query	result;
 	} query;
 } g;
 
-static void query_reset(int);
 static int ui_state_consume_query(struct fifo *);
 
 void ui_state_init() {
 	g.current = UI_STATE_QUERY;
-	query_reset(1);
+	g.query.n = 0;
+	g.query.run = 0;
+	db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
 }
 
 void ui_state_free() {
 	db_query_free(&g.query.result);
-}
-
-static void query_reset(int init) {
-	
-	g.query.n = 0;
-	g.query.prev_nl = 0;
-	g.query.run = 0;
-	if(init == 0)
-		db_query_free(&g.query.result);
-	db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
 }
 
 int ui_state_consume(struct fifo *input) {
@@ -67,11 +58,11 @@ static int ui_state_consume_query(struct fifo *input) {
 		switch(ch) {
 		case '\n': /* fall through */
 		case '\r':
-			if(g.query.prev_nl != 0)
+			if(g.query.run != 0)
 				continue;
 
-			g.query.prev_nl = 1;
 			g.query.run = 1;
+			g.query.run_ch = '\n';
 			brk = 1;
 			break;
 		case 0x0107: /* osx delete */
@@ -79,15 +70,12 @@ static int ui_state_consume_query(struct fifo *input) {
 		case 0x7f: /* backspace */
 			if(g.query.n > 0)
 				g.query.n--;
-			g.query.prev_nl = 0;
 			break;
 		case 0x014a:
 		case 0x07: /* ^G */
 			g.query.n = 0;
-			g.query.prev_nl = 0;
 			break;
 		default: /* truncate at query size limit for now */
-			g.query.prev_nl = 0;
 			if(ch >= 0x20 && ch <= 0x7e) {
 				/*aug_log("added query char: 0x%04x\n", ch);*/
 				if(g.query.n < ARRAY_SIZE(g.query.value))
@@ -133,12 +121,19 @@ void ui_state_query_value_reset() {
 	g.query.n = 0;
 }
 
-int ui_state_query_run(int reset) {
+int ui_state_query_run(uint8_t **data, size_t *size, int *run_ch, int reset) {
 	int result;
 	
 	result = g.query.run;
 	if(reset)
 		g.query.run = 0;
+
+	if(result != 0) {
+		*run_ch = g.query.run_ch;
+		ui_state_query_result_reset();
+		ui_state_query_result_next(data, size);
+		ui_state_query_result_reset();
+	}
 
 	return result;
 }

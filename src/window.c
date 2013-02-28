@@ -82,7 +82,7 @@ int window_start() {
 	if(g.win == NULL) 
 		err_panic(0, "derwin was null\n");
 
-#define WIN_SEARCH_ROW 0
+#define WIN_SEARCH_ROW 2
 	g.search_win = derwin(g.win, 1, WIN_COLS, WIN_SEARCH_ROW, 0);
 	if(g.search_win == NULL) 
 		err_panic(0, "g.search_win was null\n");
@@ -151,6 +151,20 @@ void window_refresh() {
 		if(wprintw(_win, __VA_ARGS__) == ERR) { err_warn(0, "failed to printw to window"); } \
 	} while(0)
 
+#define WERASE(_win) \
+	do { \
+		if(werase(_win) == ERR) { \
+			err_panic(0, "failed to erase window"); \
+		} \
+	} while(0)
+
+#define WMOVE(_win, _y, _x) \
+	do { \
+		if(wmove(_win, _y, _x) == ERR) { \
+			err_panic(0, "failed to move cursor"); \
+		} \
+	} while(0)
+
 static void window_render_query() {
 	const int *query;
 	uint8_t *result;
@@ -162,10 +176,10 @@ static void window_render_query() {
 	ui_state_query_value(&query, &n);
 	aug_lock_screen();
 
-	if(werase(g.search_win) == ERR)
-		err_panic(0, "failed to erase window");
-	if(wmove(g.search_win, 0, 0) == ERR)
-		err_panic(0, "failed to move cursor");
+	WMOVE(g.win, 0, 0);
+	WPRINTW(g.win, "^J: choose\t^G: clear");
+	WERASE(g.search_win);
+	WMOVE(g.search_win, 0, 0);
 	getmaxyx(g.search_win, rows, cols);
 	WPRINTW(g.search_win, "(search)`");
 	if(n > 0) 
@@ -181,10 +195,8 @@ static void window_render_query() {
 finish_search_win:
 	WPRINTW(g.search_win, "':");
 
-	if(werase(g.result_win) == ERR)
-		err_panic(0, "failed to erase window");
-	if(wmove(g.result_win, 0, 0) == ERR)
-		err_panic(0, "failed to move cursor");
+	WERASE(g.result_win);
+	WMOVE(g.result_win, 0, 0);
 
 	aug_log("window: render results\n");
 	getmaxyx(g.result_win, rows, cols);

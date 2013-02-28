@@ -434,8 +434,10 @@ void db_query_value(struct db_query *query, uint8_t **value, size_t *size) {
 		err_panic(0, "value size is negative");
 
 	*size = n;
-	*value = talloc_array(NULL, uint8_t, *size);
-	memcpy(*value, txt, *size);
+	if(*size > 0) {
+		*value = talloc_array(NULL, uint8_t, *size);
+		memcpy(*value, txt, *size);
+	}
 }
 
 static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {

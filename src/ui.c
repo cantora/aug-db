@@ -199,7 +199,10 @@ static int render() {
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, amt, do_render;
+	int status, amt, do_render, brk;
+	int run_ch, written;
+	size_t dsize;
+	uint8_t *data;
 
 	aug_log("interact: begin\n");
 	if(window_start() != 0) {
@@ -209,6 +212,7 @@ static void interact() {
 
 	do_render = 1;
 	g.waiting = 0;
+	brk = 0;
 	while(1) {
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
@@ -230,8 +234,17 @@ static void interact() {
 			UI_LOCK_PIPE(status);
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
-			if(ui_state_query_run(1) != 0) {
-				aug_log("user pressed enter\n");
+			if(ui_state_query_run(&data, &dsize, &run_ch, 1) != 0) {
+				if(dsize > 0) {
+					aug_log("run entry\n");
+					written = 0;
+					while(written < (int) dsize) {
+						written += aug_primary_input_chars( (char *) data+written, dsize-written);
+					}
+					talloc_free(data);
+					brk = 1;
+					break;
+				}
 			}
 			if(amt > 0) {
 				if(render() != 0) 
@@ -247,6 +260,8 @@ static void interact() {
 		}
 
 		UI_LOCK(status);
+		if(brk != 0)
+			break;
 		if(fifo_amt(&g.input_pipe) > 0)
 			continue;
 
