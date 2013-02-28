@@ -76,16 +76,24 @@ int window_start() {
 	}
 
 	box(win, 0, 0);
-	g.win = derwin(win, rows-2, cols-2, 1, 1);
+#define WIN_ROWS (rows-2)
+#define WIN_COLS (cols-2)
+	g.win = derwin(win, WIN_ROWS, WIN_COLS, 1, 1);
 	if(g.win == NULL) 
 		err_panic(0, "derwin was null\n");
-	g.search_win = derwin(g.win, 1, cols-2, 0, 0);
+
+#define WIN_SEARCH_ROW 0
+	g.search_win = derwin(g.win, 1, WIN_COLS, WIN_SEARCH_ROW, 0);
 	if(g.search_win == NULL) 
 		err_panic(0, "g.search_win was null\n");
-	g.result_win = derwin(g.win, rows-2-1, cols-2, 1, 0);
+	g.result_win = derwin(g.win, WIN_ROWS-(WIN_SEARCH_ROW+1), 
+			WIN_COLS, WIN_SEARCH_ROW+1, 0);
 	if(g.result_win == NULL) 
 		err_panic(0, "g.search_win was null\n");
-	
+#undef WIN_ROWS
+#undef WIN_COLS
+#undef WIN_SEARCH_ROW
+
 	if(keypad(stdscr, 1) == ERR)
 		err_panic(0, "failed to enable keypad");
 	
@@ -208,8 +216,6 @@ update:
 	wcursyncup(g.result_win);
 	wsyncup(g.search_win);
 	wcursyncup(g.search_win);
-	if(touchwin(g.search_win) == ERR)
-		err_panic(0, "failed to touch searchwin");
 	aug_screen_panel_update();
 	aug_screen_doupdate();
 	

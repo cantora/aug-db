@@ -1,0 +1,4 @@
+-mention that some users (OSX for sure) may need to specify --ncterm
+	as 'screen' on aug command line to prevent rendering problems in 
+	the aug-db window
+
