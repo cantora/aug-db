@@ -1,6 +1,5 @@
 #include "window.h"
 
-#include "api_calls.h"
 #include "err.h"
 #include "ui_state.h"
 #include "lock.h"
@@ -171,6 +170,9 @@ static void window_render_query() {
 	size_t n, i, rsize;
 	int j, rows, cols, x, y, raw;
 	char esc[5];
+	cchar_t cch;
+	attr_t attr, *ap;
+	short pair, *pp;
 
 	err_assert(g.win != NULL);
 
@@ -191,8 +193,17 @@ static void window_render_query() {
 				aug_log("exceeded window size of %d,%d\n", rows, cols);
 				goto finish_search_win;
 			}
-			WADDCH(g.search_win, query[i]);
+
+			ap = &attr;
+			pp = &pair;
+			if(wattr_get(g.search_win, ap, pp, NULL) == ERR)
+				err_panic(0, "wattr_get failed");
+			if(setcchar(&cch, (wchar_t *)&query[i], attr, pair, NULL) == ERR)
+				err_panic(0, "setcchar failed");
+			if(wadd_wch(g.search_win, &cch) == ERR)
+				err_panic(0, "wadd_wch failed");
 		}
+
 finish_search_win:
 	WPRINTW(g.search_win, "':");
 
