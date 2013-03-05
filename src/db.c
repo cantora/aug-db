@@ -13,8 +13,13 @@
  * version 1:
  * 		admin: INTEGER version
  *		tags: INTEGER id, TEXT name
- *		blobs: INTEGER id, BLOB value
+ *		blobs: INTEGER id, BLOB value, INTEGER raw
  *		fk_blobs_tags: INTEGER blob_id, INTEGER tag_id
+ *
+ * if raw = 0, the blob value will be interpreted as 
+ * utf-8 encoded text. if raw != 0, then the blob
+ * value will be interpreted as raw bytes, so no
+ * decoding will take place.
  */
 const char db_qm1_admin[] = 
 	"CREATE TABLE admin ("
@@ -45,6 +50,8 @@ const char db_qm1_blobs[] =
 			"PRIMARY KEY ON CONFLICT ROLLBACK AUTOINCREMENT,"
 		"value BLOB NOT NULL ON CONFLICT ROLLBACK "
 			"UNIQUE ON CONFLICT ROLLBACK, "
+		"raw INTEGER NOT NULL ON CONFLICT ROLLBACK "
+			"DEFAULT 0, "
 		"created_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
 			"DEFAULT (strftime('%s','now')), "
 		"updated_at INTEGER NOT NULL ON CONFLICT ROLLBACK "
@@ -286,7 +293,7 @@ done:
 }
 
 /* this function should be run within a transaction */
-static int db_find_or_create_blob(const void *data, size_t bytes) {
+static int db_find_or_create_blob(const void *data, size_t bytes, int raw) {
 	sqlite3_stmt *stmt;
 	int bid;
 
@@ -294,8 +301,9 @@ static int db_find_or_create_blob(const void *data, size_t bytes) {
 		return bid;
 	}
 	
-	DB_STMT_PREP("INSERT INTO blobs (value) VALUES (?)", &stmt);
+	DB_STMT_PREP("INSERT INTO blobs (value, raw) VALUES (?, ?)", &stmt);
 	DB_BIND_BLOB(stmt, 1, data, bytes);
+	DB_BIND_INT(stmt, 2, raw);
 	DB_STMT_EXEC(stmt);
 
 	bid = sqlite3_last_insert_rowid(g.handle);
@@ -363,11 +371,11 @@ static void db_tag_blob(int bid, const char **tags, size_t ntags) {
 	DB_STMT_FINALIZE(stmt);
 }
 
-void db_add(const void *data, size_t bytes, const char **tags, size_t ntags) {
+void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t ntags) {
 	int bid;
 	
 	DB_BEGIN();
-	bid = db_find_or_create_blob(data, bytes);
+	bid = db_find_or_create_blob(data, bytes, raw);
 	db_tag_blob(bid, tags, ntags);
 	DB_COMMIT();
 }
@@ -379,7 +387,7 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 	
 	if(nqueries < 1 && ntags < 1) {
 		sql = 
-			"SELECT DISTINCT b.value, 0 AS score "
+			"SELECT DISTINCT b.value, b.raw, 0 AS score "
 			"FROM blobs b " 
 			"ORDER BY b.chosen_at DESC";
 	}
@@ -424,19 +432,20 @@ void db_query_reset(struct db_query *query) {
 	DB_STMT_RESET(query->stmt);
 }
 
-void db_query_value(struct db_query *query, uint8_t **value, size_t *size) {
-	const unsigned char *txt;
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size, int *raw) {
+	const void *data;
 	int n;
-	if( (txt = sqlite3_column_text(query->stmt, 0)) == NULL)
+	
+	*raw = sqlite3_column_int(query->stmt, 1);
+	if( (data = sqlite3_column_blob(query->stmt, 0)) == NULL)
 		err_panic(0, "column data is NULL: %s", sqlite3_errmsg(g.handle));
-
 	if( (n = sqlite3_column_bytes(query->stmt, 0)) < 0)
 		err_panic(0, "value size is negative");
 
 	*size = n;
 	if(*size > 0) {
 		*value = talloc_array(NULL, uint8_t, *size);
-		memcpy(*value, txt, *size);
+		memcpy(*value, data, *size);
 	}
 }
 
@@ -448,7 +457,7 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		"(b.value LIKE '%%'||?%03d||'%%' OR t.name LIKE '%%'||?%03d||'%%')";
 	char tag_like[] = "(t.name LIKE '%%'||?%03d||'%%')";
 	const char fmt1[] = 
-		"SELECT DISTINCT b.value, ((%s)*10 + (%s)) AS score "
+		"SELECT DISTINCT b.value, b.raw, ((%s)*10 + (%s)) AS score "
 		"FROM blobs b " 
 			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id " 
 			"INNER JOIN tags t ON bt.tag_id = t.id "

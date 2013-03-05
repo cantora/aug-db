@@ -63,7 +63,7 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 	else {
 		key = default_key;
 		aug_log("no command key configured, using default: %s\n", key);
-	}	
+	}
 
 	if( aug_keyname_to_key(key, &g_cmd_ch) != 0 ) {
 		aug_log("failed to map character key to %s\n", key);

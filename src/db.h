@@ -13,7 +13,7 @@ struct db_query {
 int db_init(const char *fpath);
 void db_free();
 
-void db_add(const void *data, size_t bytes, const char **tags, size_t ntags);
+void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t ntags);
 
 void db_query_prepare(struct db_query *query, const char **queries, size_t nqueries,
 		const char **tags, size_t ntags);
@@ -22,7 +22,7 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 int db_query_step(struct db_query *query);
 
 /* value will be set to a talloc'd buffer of size *size */
-void db_query_value(struct db_query *query, uint8_t **value, size_t *size);
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size, int *raw);
 void db_query_reset(struct db_query *query);
 void db_query_free(struct db_query *query);
 

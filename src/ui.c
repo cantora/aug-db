@@ -11,6 +11,7 @@
 
 #include <pthread.h>
 #include <errno.h>
+#include <iconv.h>
 #include <ccan/array_size/array_size.h>
 
 /* this module represents the user interface thread and the functions
@@ -30,6 +31,7 @@ static struct {
 	int input_buf[1024];
 	struct fifo input_pipe;
 	pthread_mutex_t pipe_mtx;
+	iconv_t cd;
 } g;
 
 static void *ui_t_run(void *);
@@ -53,6 +55,9 @@ int ui_init() {
 		return -1;
 	if(pthread_cond_init(&g.wakeup, NULL) != 0)
 		goto cleanup_mtx;
+
+	if( (g.cd = iconv_open("WCHAR_T", "UTF8")) == ((iconv_t) -1) )
+		return -1;
 
 	ui_state_init();
 	if(window_init() != 0)
@@ -101,6 +106,8 @@ void ui_free() {
 
 	window_free();
 	ui_state_free();
+	if(iconv_close(g.cd) != 0)
+		err_warn(errno, "failed to close iconv descriptor");
 	if( (status = pthread_cond_destroy(&g.wakeup)) != 0)
 		err_warn(status, "failed to destroy ui condition");
 	if( (status = pthread_mutex_destroy(&g.mtx)) != 0)
@@ -195,11 +202,41 @@ static int render() {
 	return 0;
 }
 
+static void write_data_to_term(uint8_t *data, size_t dsize, int raw, 
+		uint32_t run_ch) {
+	int written;
+	size_t ibl, obl;
+	uint32_t ch;
+	char *dp, *chp;
+	(void)(run_ch);
+		
+	aug_log("run entry\n");
+	if(raw == 0) { /* utf-8 */
+		ibl = dsize;
+		obl = sizeof(ch);
+		dp = (char *) data;
+		while(ibl > 0) {
+			if(iconv(g.cd, &dp, &ibl, &chp, &obl) == ((size_t) -1))
+				err_panic(errno, "failed to convert data to utf-32");
+
+			while( (written = aug_primary_input(&ch, 1)) != 1)
+				if(written != 0)
+					err_panic(0, "expected written == 0");
+		}
+
+	}
+	else { /* raw bytes */
+		written = 0;
+		while(written < (int) dsize) 
+			written += aug_primary_input_chars( (char *) data+written, dsize-written);
+	}
+}
+
 /* mtx is locked upon entry to this function.
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, amt, do_render, brk, written;
+	int status, amt, do_render, brk, raw;
 	uint32_t run_ch;
 	size_t dsize;
 	uint8_t *data;
@@ -234,16 +271,12 @@ static void interact() {
 			UI_LOCK_PIPE(status);
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
-			if(ui_state_query_run(&data, &dsize, &run_ch, 1) != 0) {
+			if(ui_state_query_run(&data, &dsize, &raw, &run_ch, 1) != 0) {
 				if(dsize > 0) {
-					aug_log("run entry\n");
-					written = 0;
-					while(written < (int) dsize) {
-						written += aug_primary_input_chars( (char *) data+written, dsize-written);
-					}
+					write_data_to_term(data, dsize, raw, run_ch);					
 					talloc_free(data);
 					brk = 1;
-					break;
+					break; /* maybe clear pipe here? */
 				}
 			}
 			if(amt > 0) {

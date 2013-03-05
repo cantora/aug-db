@@ -122,7 +122,8 @@ void ui_state_query_value_reset() {
 	g.query.n = 0;
 }
 
-int ui_state_query_run(uint8_t **data, size_t *size, uint32_t *run_ch, int reset) {
+int ui_state_query_run(uint8_t **data, size_t *size, int *raw, 
+		uint32_t *run_ch, int reset) {
 	int result;
 	
 	result = g.query.run;
@@ -132,20 +133,21 @@ int ui_state_query_run(uint8_t **data, size_t *size, uint32_t *run_ch, int reset
 	if(result != 0) {
 		*run_ch = g.query.run_ch;
 		ui_state_query_result_reset();
-		ui_state_query_result_next(data, size);
+		if(ui_state_query_result_next(data, size, raw) != 0)
+			return 0; /* no results, dont run. */
 		ui_state_query_result_reset();
 	}
 
 	return result;
 }
 
-int ui_state_query_result_next(uint8_t **data, size_t *n) {
+int ui_state_query_result_next(uint8_t **data, size_t *n, int *raw) {
 	if(db_query_step(&g.query.result) != 0) {
 		aug_log("ui_state: no more results\n");
 		return -1;
 	}
 
-	db_query_value(&g.query.result, data, n);
+	db_query_value(&g.query.result, data, n, raw);
 	return 0;
 }
 
