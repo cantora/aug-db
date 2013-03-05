@@ -11,7 +11,7 @@ typedef enum {
 	UI_STATE_EDIT
 } ui_state_name;
 
-void ui_state_init();
+int ui_state_init();
 void ui_state_free();
 int ui_state_consume(struct fifo *input);
 void ui_state_query_value(const uint32_t **value, size_t *n);

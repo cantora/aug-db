@@ -57,11 +57,12 @@ int ui_init() {
 		goto cleanup_mtx;
 
 	if( (g.cd = iconv_open("WCHAR_T", "UTF8")) == ((iconv_t) -1) )
-		return -1;
-
-	ui_state_init();
-	if(window_init() != 0)
 		goto cleanup_cond;
+
+	if(ui_state_init() != 0)
+		goto cleanup_iconv;
+	if(window_init() != 0)
+		goto cleanup_ui_state;
 
 	fifo_init(&g.input_pipe, g.input_buf, sizeof(uint32_t), ARRAY_SIZE(g.input_buf));
 
@@ -74,6 +75,11 @@ int ui_init() {
 
 cleanup_window:
 	window_free();
+cleanup_ui_state:
+	ui_state_free();
+cleanup_iconv:
+	if(iconv_close(g.cd) != 0)
+		err_warn(errno, "failed to close iconv descriptor");
 cleanup_cond:
 	pthread_cond_destroy(&g.wakeup);
 cleanup_mtx:
@@ -218,7 +224,7 @@ static void write_data_to_term(uint8_t *data, size_t dsize, int raw,
 			obl = sizeof(ch);
 			chp = (char *) &ch;
 	
-			aug_log("%d bytes left to convert\n", ibl);
+			/*aug_log("%d bytes left to convert\n", ibl);*/
 			if( (status = iconv(g.cd, &dp, &ibl, &chp, &obl)) == ((size_t) -1)) {
 				if(errno != E2BIG)
 					err_panic(errno, "failed to convert data to utf-32");

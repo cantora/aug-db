@@ -2,6 +2,7 @@
 #define AUG_DB_ERR_H
 
 #include <stdlib.h>
+#include <errno.h>
 #include <ccan/str/str.h>
 
 /* these routines are meant for a non-primary thread 

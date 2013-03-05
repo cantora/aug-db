@@ -15,8 +15,9 @@ void db_free();
 
 void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t ntags);
 
-void db_query_prepare(struct db_query *query, const char **queries, size_t nqueries,
-		const char **tags, size_t ntags);
+/* queries and tags are utf-8 encoded strings */
+void db_query_prepare(struct db_query *query, const uint8_t **queries, size_t nqueries,
+		const uint8_t **tags, size_t ntags);
 
 /* returns 0 on data, non-zero otherwise */
 int db_query_step(struct db_query *query);

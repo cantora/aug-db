@@ -4,6 +4,7 @@
 #include "err.h"
 #include "db.h"
 
+#include <iconv.h>
 #include <ccan/array_size/array_size.h>
 
 static struct {
@@ -15,19 +16,30 @@ static struct {
 		uint32_t run_ch;
 		struct db_query	result;
 	} query;
+	iconv_t cd;
 } g;
 
 static int ui_state_consume_query(struct fifo *);
+static void prepare_query();
 
-void ui_state_init() {
+int ui_state_init() {
 	g.current = UI_STATE_QUERY;
 	g.query.n = 0;
 	g.query.run = 0;
-	db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
+
+	if( (g.cd = iconv_open("UTF8", "WCHAR_T")) == ((iconv_t) -1) )
+		return -1;
+
+	prepare_query();
+
+	return 0;
 }
 
 void ui_state_free() {
 	db_query_free(&g.query.result);
+
+	if(iconv_close(g.cd) != 0)
+		err_warn(errno, "failed to close iconv descriptor");
 }
 
 int ui_state_consume(struct fifo *input) {
@@ -43,12 +55,36 @@ int ui_state_consume(struct fifo *input) {
 	return amt;
 }
 
+static void prepare_query() {
+	size_t status, ibl, obl;
+	size_t vlen = g.query.n*8+1;
+	/* utf-8 should be able to represent any code point in less than 8 bytes */
+	uint8_t value[vlen]; 
+	const uint8_t *queries[1];
+	char *ip, *op;
+
+	if(g.query.n > 0) {
+		ip = (char *) g.query.value;
+		op = (char *) value;
+		ibl = g.query.n*sizeof(uint32_t);
+		obl = vlen-1;
+
+		if( (status = iconv(g.cd, &ip, &ibl, &op, &obl)) == ((size_t) -1) )
+			err_panic(errno, "failed to convert query value to utf-8");
+
+		value[vlen-1-obl] = '\0';
+		queries[0] = value;
+		db_query_prepare(&g.query.result, queries, 1, NULL, 0);
+	}
+	else
+		db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
+
+}
+
 static int ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
 	uint32_t ch;
 	int brk;
-	char value[ARRAY_SIZE(g.query.value)+1];
-	const char *queries[1];
 	
 	if( (amt = fifo_amt(input)) < 1)
 		return 0;
@@ -95,16 +131,7 @@ static int ui_state_consume_query(struct fifo *input) {
 	} /* for i up to amt */
 
 	db_query_free(&g.query.result);
-
-	if(g.query.n > 0) {	
-		for(i = 0; i < g.query.n; i++) 
-			value[i] = (char) g.query.value[i];
-		value[i] = '\0';
-		queries[0] = value;
-		db_query_prepare(&g.query.result, queries, 1, NULL, 0);
-	}
-	else
-		db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
+	prepare_query();
 
 	return i+1;
 }

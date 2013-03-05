@@ -380,8 +380,8 @@ void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t n
 	DB_COMMIT();
 }
 
-void db_query_prepare(struct db_query *query, const char **queries, size_t nqueries,
-		const char **tags, size_t ntags) {
+void db_query_prepare(struct db_query *query, const uint8_t **queries, size_t nqueries,
+		const uint8_t **tags, size_t ntags) {
 	char *sql;
 	size_t i;
 	
@@ -402,11 +402,11 @@ void db_query_prepare(struct db_query *query, const char **queries, size_t nquer
 
 	for(i = 0; i < nqueries; i++) {
 		aug_log("bind %s to ?(%d)\n", queries[i], i+1);
-		DB_QP_BIND(i+1, queries[i]);
+		DB_QP_BIND(i+1, (const char *) queries[i]);
 	}
 	for(i = 0; i < ntags; i++) {
 		aug_log("bind %s to ?(%d)\n", tags[i], nqueries+i+1);
-		DB_QP_BIND(nqueries+i+1, tags[i]);
+		DB_QP_BIND(nqueries+i+1, (const char *) tags[i]);
 	}
 #undef DB_QP_BIND
 
