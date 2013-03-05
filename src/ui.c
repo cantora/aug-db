@@ -58,7 +58,7 @@ int ui_init() {
 	if(window_init() != 0)
 		goto cleanup_cond;
 
-	fifo_init(&g.input_pipe, g.input_buf, sizeof(int), ARRAY_SIZE(g.input_buf));
+	fifo_init(&g.input_pipe, g.input_buf, sizeof(uint32_t), ARRAY_SIZE(g.input_buf));
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
@@ -144,7 +144,7 @@ void ui_on_cmd_key() {
 	wakeup_ui_thread(set_sig_cmd_key);
 }
 
-int ui_on_input(const int *ch) {
+int ui_on_input(const uint32_t *ch) {
 	int status;
 	/*aug_log("ui_on_input: 0x%04x\n", *ch);*/
 
@@ -199,8 +199,8 @@ static int render() {
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, amt, do_render, brk;
-	int run_ch, written;
+	int status, amt, do_render, brk, written;
+	uint32_t run_ch;
 	size_t dsize;
 	uint8_t *data;
 

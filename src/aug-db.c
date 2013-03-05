@@ -11,12 +11,9 @@
 
 const char aug_plugin_name[] = "aug-db";
 
-static void on_cmd_key(int, void *);
-static void on_input(int *, aug_action *, void *);
+static void on_cmd_key(uint32_t, void *);
+static void on_input(uint32_t *, aug_action *, void *);
 static void on_dims_change(int, int, void *);
-
-/* requires screen lock b.c. curses calls are invoked */
-static int char_rep_to_char(const char *, int *);
 
 struct aug_plugin_cb g_callbacks = {
 	.input_char = on_input,
@@ -25,7 +22,7 @@ struct aug_plugin_cb g_callbacks = {
 	.screen_dims_change = on_dims_change
 };
 
-static int g_cmd_ch;
+static uint32_t g_cmd_ch;
 static int g_freed;
 
 int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
@@ -68,13 +65,10 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 		aug_log("no command key configured, using default: %s\n", key);
 	}	
 
-	aug_lock_screen();
-	if( char_rep_to_char(key, &g_cmd_ch) != 0 ) {
+	if( aug_keyname_to_key(key, &g_cmd_ch) != 0 ) {
 		aug_log("failed to map character key to %s\n", key);
-		aug_unlock_screen();
 		return -1;
 	}
-	aug_unlock_screen();
 
 	/* register callback for when the user wants to activate aug-db features */
 	if( aug_key_bind(g_cmd_ch, on_cmd_key, NULL) != 0) {
@@ -105,14 +99,14 @@ void aug_plugin_free() {
 	db_free();
 }
 
-static void on_cmd_key(int ch, void *user) {
+static void on_cmd_key(uint32_t ch, void *user) {
 	(void)(ch);
 	(void)(user);
 
 	ui_on_cmd_key();
 }
 
-static void on_input(int *ch, aug_action *action, void *user) {
+static void on_input(uint32_t *ch, aug_action *action, void *user) {
 	int status;
 	(void)(action);
 	(void)(user);
@@ -126,28 +120,6 @@ static void on_input(int *ch, aug_action *action, void *user) {
 
 static void on_dims_change(int rows, int cols, void *user) {
 	(void)(user);
-	(void)(rows);
-	(void)(cols);
 	ui_on_dims_change(rows, cols);
-}
-
-static int char_rep_to_char(const char *str, int *ch) {
-	int i;
-	const char *s;
-
-	for(i = 0; i <= 0xff; i++) {
-		if( (s = unctrl(i)) == NULL )
-			return -1;
-
-		if(strcasecmp(str, s) == 0) {
-			*ch = i;
-			break;	
-		}
-	}
-
-	if(i > 0xff)
-		return -1;
-
-	return 0;
 }
 

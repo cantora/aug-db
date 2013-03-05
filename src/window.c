@@ -166,7 +166,7 @@ void window_refresh() {
 	} while(0)
 
 static void window_render_query() {
-	const int *query;
+	const uint32_t *query;
 	uint8_t *result;
 	size_t n, i, rsize;
 	int j, rows, cols, x, y;

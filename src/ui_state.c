@@ -9,10 +9,10 @@
 static struct {
 	ui_state_name current;
 	struct {
-		int value[1024];
+		uint32_t value[1024];
 		size_t n;
 		int run;
-		int run_ch;
+		uint32_t run_ch;
 		struct db_query	result;
 	} query;
 } g;
@@ -45,7 +45,8 @@ int ui_state_consume(struct fifo *input) {
 
 static int ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
-	int ch, brk;
+	uint32_t ch;
+	int brk;
 	char value[ARRAY_SIZE(g.query.value)+1];
 	const char *queries[1];
 	
@@ -112,7 +113,7 @@ ui_state_name ui_state_current() {
 	return g.current;
 }
 
-void ui_state_query_value(const int **value, size_t *n) {
+void ui_state_query_value(const uint32_t **value, size_t *n) {
 	*value = g.query.value;
 	*n = g.query.n;
 }
@@ -121,7 +122,7 @@ void ui_state_query_value_reset() {
 	g.query.n = 0;
 }
 
-int ui_state_query_run(uint8_t **data, size_t *size, int *run_ch, int reset) {
+int ui_state_query_run(uint8_t **data, size_t *size, uint32_t *run_ch, int reset) {
 	int result;
 	
 	result = g.query.run;
