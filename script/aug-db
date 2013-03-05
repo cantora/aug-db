@@ -24,6 +24,10 @@ def opt_parser():
 	parser.add_argument('-i', '--input', help='input text')
 	parser.add_argument('-t', '--tags', nargs='+', help='mark input with tag(s)')
 	parser.add_argument(
+		'-r', '--raw', action='store_true',
+		help='set input type to "raw" instead of "utf-8"'
+	)
+	parser.add_argument(
 		'-v', '--verbose', action='store_true', 
 		help='print debug output.'
 	)
@@ -66,7 +70,10 @@ def run(options):
 	blob_id = c.fetchone()
 	if not blob_id:
 		log("insert input: %r" % input)
-		c.execute('INSERT INTO blobs (value) VALUES (?)', (input,))
+		c.execute(
+			'INSERT INTO blobs (value, raw) VALUES (?, ?)', 
+			(input, 1 if options.raw else 0)
+		)
 
 		blob_id = c.lastrowid
 

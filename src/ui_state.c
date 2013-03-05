@@ -113,7 +113,7 @@ static int ui_state_consume_query(struct fifo *input) {
 			g.query.n = 0;
 			break;
 		default: /* truncate at query size limit for now */
-			if(ch >= 0x20 && ch <= 0x7e) {
+			if(ch >= 0x20 && ch != 0x7f) {
 				/*aug_log("added query char: 0x%04x\n", ch);*/
 				if(g.query.n < ARRAY_SIZE(g.query.value))
 					g.query.value[g.query.n++] = ch;

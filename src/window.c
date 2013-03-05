@@ -170,6 +170,7 @@ static void window_render_query() {
 	uint8_t *result;
 	size_t n, i, rsize;
 	int j, rows, cols, x, y, raw;
+	char esc[5];
 
 	err_assert(g.win != NULL);
 
@@ -210,13 +211,31 @@ finish_search_win:
 			WADDCH(g.result_win, '-');
 		}
 
+#define CHECK_FOR_SPACE() \
+	do { \
+		getyx(g.result_win, y, x); \
+		if(y >= rows - 1 && x >= cols - 4) { \
+			WPRINTW(g.result_win, "..."); \
+			goto update; \
+		} \
+	} while(0)
+
 		for(i = 0; i < rsize; i++) {
-			getyx(g.result_win, y, x); 
-			if(y >= rows - 1 && x >= cols - 4) { 
-				WPRINTW(g.result_win, "..."); 
-				goto update; 
+			CHECK_FOR_SPACE();
+
+			if(raw == 0)
+				WADDCH(g.result_win, result[i]);
+			else {
+				if(result[i] >= 0x20 && result[i] <= 0x7e)
+					WADDCH(g.result_win, result[i]);
+				else {
+					snprintf(esc, 5, "\\x%02x", result[i]);
+					for(j = 0; j < 4; j++) {
+						CHECK_FOR_SPACE();
+						WADDCH(g.result_win, esc[j]);
+					}
+				}
 			}
-			WADDCH(g.result_win, result[i]);
 		}
 		waddch(g.result_win, '\n');
 
