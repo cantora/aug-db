@@ -93,15 +93,6 @@ static int ui_state_consume_query(struct fifo *input) {
 	for(i = 0; i < amt; i++) {
 		fifo_pop(input, &ch);
 		switch(ch) {
-		case '\n': /* fall through */
-		case '\r':
-			if(g.query.run != 0)
-				continue;
-
-			g.query.run = 1;
-			g.query.run_ch = '\n';
-			brk = 1;
-			break;
 		case 0x0107: /* osx delete */
 		case 0x08: /* ^H */
 		case 0x7f: /* backspace */
@@ -120,8 +111,14 @@ static int ui_state_consume_query(struct fifo *input) {
 				else
 					aug_log("exceeded max query size, query will be truncated\n");
 			}
-			else
-				aug_log("dropped unprintable character 0x%04x\n", ch);
+			else {
+				if(g.query.run != 0)
+					continue;
+
+				g.query.run = 1;
+				g.query.run_ch = ch;
+				brk = 1;
+			}
 		} /* switch(ch) */
 
 		if(brk != 0) {
