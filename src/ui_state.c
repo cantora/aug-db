@@ -11,12 +11,25 @@ static struct {
 	ui_state_name current;
 	struct {
 		uint32_t value[1024];
+		/* the size of the data in value */
 		size_t n;
+		/* flag which signals whether the current query
+		 * value has been selected by the user. run > 0
+		 * means the user selected the first result in 
+		 * the current query result. run < 0 means the
+		 * user wants to exit interaction with aug-db. */
 		int run;
-		uint32_t run_ch;
+		/* the input character used to select the result item.
+		 * when the result is written to the terminal it will
+		 * be terminated with this character. */
+		uint32_t run_ch; 
+		/* result db_query object from db.c */
 		struct db_query	result;
+		/* current offset into the sql query */
 		unsigned int offset;
-		int more_data;
+		/* the number of result items displayed on the page for 
+		 * the current query result. */
+		int page_size;
 	} query;
 	iconv_t cd;
 } g;
@@ -80,7 +93,7 @@ static void prepare_query() {
 	else
 		db_query_prepare(&g.query.result, g.query.offset, NULL, 0, NULL, 0);
 
-	g.query.more_data = 1;
+	g.query.page_size = 0;
 }
 
 static int ui_state_consume_query(struct fifo *input) {
@@ -115,7 +128,7 @@ static int ui_state_consume_query(struct fifo *input) {
 			}
 			break;
 		case 0x0e: /* ^N */
-			if(g.query.more_data != 0) {
+			if(g.query.page_size > 1) {
 				g.query.offset += 1;
 				nop = 0;
 			}
@@ -155,6 +168,7 @@ static int ui_state_consume_query(struct fifo *input) {
 	}
 	else {
 		db_query_reset(&g.query.result);
+		g.query.page_size = 0;
 	}
 
 	return i+1;
@@ -177,7 +191,7 @@ int ui_state_query_value_reset() {
 	g.query.n = 0;
 	g.query.offset = 0;
 	g.query.run = 0;
-	g.query.more_data = 1;
+	g.query.page_size = 0;
 
 	return result;
 }
@@ -209,11 +223,11 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 int ui_state_query_result_next(uint8_t **data, size_t *n, int *raw, int *id) {
 	if(db_query_step(&g.query.result) != 0) {
 		aug_log("ui_state: no more results\n");
-		g.query.more_data = 0;
 		return -1;
 	}
 
 	db_query_value(&g.query.result, data, n, raw, id);
+	g.query.page_size += 1;
 	return 0;
 }
 
