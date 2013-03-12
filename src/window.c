@@ -215,10 +215,10 @@ finish_search_win:
 	WERASE(g.result_win);
 	WMOVE(g.result_win, 0, 0);
 
-	aug_log("window: render results\n");
+	/*aug_log("window: render results\n");*/
 	getmaxyx(g.result_win, rows, cols);
 	while(ui_state_query_result_next(&result, &rsize, &raw, &id) == 0) {
-		aug_log("window: render query result\n");
+		/*aug_log("window: render query result\n");*/
 		getyx(g.result_win, y, x); 
 		if(y >= rows - 1)
 			goto update;

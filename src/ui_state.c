@@ -175,6 +175,7 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 			return 0; /* no results, dont run. */
 		db_update_chosen_at(id);
 		ui_state_query_value_reset();
+		db_query_free(&g.query.result);
 		prepare_query();
 	}
 

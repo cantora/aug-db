@@ -407,18 +407,18 @@ void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t
 	else 
 		db_query_fmt(nqueries, ntags, &sql);
 
-	aug_log("db: prepare sql %s\n", sql);
 	DB_STMT_PREP(sql, &query->stmt);
+	aug_log("db: prepare sql (%p) %s\n", query->stmt, sql);
 
 #define DB_QP_BIND(_idx, _ptr) \
 	DB_BIND_BUF(text, query->stmt, _idx, _ptr, -1, SQLITE_TRANSIENT)
 
 	for(i = 0; i < nqueries; i++) {
-		aug_log("bind %s to ?(%d)\n", queries[i], i+1);
+		/*aug_log("bind %s to ?(%d)\n", queries[i], i+1);*/
 		DB_QP_BIND(i+1, (const char *) queries[i]);
 	}
 	for(i = 0; i < ntags; i++) {
-		aug_log("bind %s to ?(%d)\n", tags[i], nqueries+i+1);
+		/*aug_log("bind %s to ?(%d)\n", tags[i], nqueries+i+1);*/
 		DB_QP_BIND(nqueries+i+1, (const char *) tags[i]);
 	}
 #undef DB_QP_BIND
@@ -431,6 +431,7 @@ void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t
 }
 
 void db_query_free(struct db_query *query) {
+	aug_log("db: free %p\n", query->stmt);
 	DB_STMT_FINALIZE(query->stmt);
 	query->stmt = NULL;
 }
@@ -520,8 +521,8 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		q_score_fmt = "0";
 		q_fmt = "1";
 	}
-	aug_log("db: q_score_fmt => %s\n", q_score_fmt);
-	aug_log("db: q_fmt => %s\n", q_fmt);
+	/*aug_log("db: q_score_fmt => %s\n", q_score_fmt);*/
+	/*aug_log("db: q_fmt => %s\n", q_fmt);*/
 
 	if(ntags > 0) {
 		char **list = talloc_array(NULL, char *, ntags+1);
@@ -538,8 +539,8 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		t_score_fmt = "0";
 		t_fmt = "1";
 	}
-	aug_log("db: t_score_fmt => %s\n", t_score_fmt);
-	aug_log("db: t_fmt => %s\n", t_fmt);
+	/*aug_log("db: t_score_fmt => %s\n", t_score_fmt);*/
+	/*aug_log("db: t_fmt => %s\n", t_fmt);*/
 	
 	*result = talloc_asprintf(NULL, fmt1, q_score_fmt, t_score_fmt, q_fmt, t_fmt);
 
