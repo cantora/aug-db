@@ -276,6 +276,13 @@ static int db_stmt_step(sqlite3_stmt *stmt) {
 		} \
 	} while(0) 
 
+#define DB_BIND_PRM_IDX(_stmt_ptr, _name, _idx_ptr) \
+	do { \
+		if( ((*_idx_ptr) = sqlite3_bind_parameter_index(_stmt_ptr, _name)) < 1) { \
+			err_panic(0, "failed to find index for %s", _name); \
+		} \
+	} while(0)
+		
 static int db_blob_id(const void *data, size_t bytes) {
 	int id;
 	sqlite3_stmt *stmt;
@@ -380,16 +387,22 @@ void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t n
 	DB_COMMIT();
 }
 
-void db_query_prepare(struct db_query *query, const uint8_t **queries, size_t nqueries,
-		const uint8_t **tags, size_t ntags) {
+#define DB_QUERY_COLUMNS "b.value, b.raw, b.id"
+#define DB_QUERY_LIMIT "LIMIT 200 OFFSET @offset"
+
+void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t **queries, 
+		size_t nqueries, const uint8_t **tags, size_t ntags) {
 	char *sql;
 	size_t i;
+	int offset_idx;
 	
 	if(nqueries < 1 && ntags < 1) {
 		sql = 
-			"SELECT DISTINCT b.value, b.raw, 0 AS score "
+			"SELECT DISTINCT " 
+				DB_QUERY_COLUMNS ", 0 AS score "
 			"FROM blobs b " 
-			"ORDER BY b.chosen_at DESC";
+			"ORDER BY b.chosen_at DESC "
+			DB_QUERY_LIMIT ;
 	}
 	else 
 		db_query_fmt(nqueries, ntags, &sql);
@@ -409,6 +422,9 @@ void db_query_prepare(struct db_query *query, const uint8_t **queries, size_t nq
 		DB_QP_BIND(nqueries+i+1, (const char *) tags[i]);
 	}
 #undef DB_QP_BIND
+
+	DB_BIND_PRM_IDX(query->stmt, "@offset", &offset_idx);
+	DB_BIND_INT(query->stmt, offset_idx, offset);
 
 	if(!(nqueries < 1 && ntags < 1))
 		talloc_free(sql);
@@ -475,12 +491,14 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		"(b.value LIKE '%%'||?%03d||'%%' OR t.name LIKE '%%'||?%03d||'%%')";
 	char tag_like[] = "(t.name LIKE '%%'||?%03d||'%%')";
 	const char fmt1[] = 
-		"SELECT DISTINCT b.value, b.raw, b.id, ((%s)*10 + (%s)) AS score "
+		"SELECT DISTINCT "
+			DB_QUERY_COLUMNS ", ((%s)*10 + (%s)) AS score "
 		"FROM blobs b " 
 			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id " 
 			"INNER JOIN tags t ON bt.tag_id = t.id "
 		"WHERE %s AND (%s) "
-		"ORDER BY score DESC, b.chosen_at DESC";
+		"ORDER BY score DESC, b.chosen_at DESC "
+		DB_QUERY_LIMIT;
 
 	if(nqueries < 1 && ntags < 1)
 		err_panic(0, "must provide at least one query or tag");

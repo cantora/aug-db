@@ -15,6 +15,8 @@ static struct {
 		int run;
 		uint32_t run_ch;
 		struct db_query	result;
+		unsigned int offset;
+		int more_data;
 	} query;
 	iconv_t cd;
 } g;
@@ -24,8 +26,7 @@ static void prepare_query();
 
 int ui_state_init() {
 	g.current = UI_STATE_QUERY;
-	g.query.n = 0;
-	g.query.run = 0;
+	ui_state_query_value_reset();
 
 	if( (g.cd = iconv_open("UTF8", "WCHAR_T")) == ((iconv_t) -1) )
 		return -1;
@@ -74,11 +75,12 @@ static void prepare_query() {
 
 		value[vlen-1-obl] = '\0';
 		queries[0] = value;
-		db_query_prepare(&g.query.result, queries, 1, NULL, 0);
+		db_query_prepare(&g.query.result, g.query.offset, queries, 1, NULL, 0);
 	}
 	else
-		db_query_prepare(&g.query.result, NULL, 0, NULL, 0);
+		db_query_prepare(&g.query.result, g.query.offset, NULL, 0, NULL, 0);
 
+	g.query.more_data = 1;
 }
 
 static int ui_state_consume_query(struct fifo *input) {
@@ -95,17 +97,30 @@ static int ui_state_consume_query(struct fifo *input) {
 		switch(ch) {
 		case 0x08: /* ^H */
 		case 0x7f: /* backspace */
-			if(g.query.n > 0)
+			if(g.query.n > 0) {
 				g.query.n--;
+				g.query.offset = 0;
+			}
 			break;
 		case 0x07: /* ^G */
-			g.query.n = 0;
+			ui_state_query_value_reset();
 			break;
+		case 0x10: /* ^P */
+			if(g.query.offset > 0)
+				g.query.offset -= 1;
+			break;
+		case 0x0e: /* ^N */
+			if(g.query.more_data != 0)
+				g.query.offset += 1;
+			break;
+
 		default: /* truncate at query size limit for now */
 			if(ch >= 0x20 && ch != 0x7f) {
 				/*aug_log("added query char: 0x%04x\n", ch);*/
-				if(g.query.n < ARRAY_SIZE(g.query.value))
+				if(g.query.n < ARRAY_SIZE(g.query.value)) {
 					g.query.value[g.query.n++] = ch;
+					g.query.offset = 0;
+				}
 				else
 					aug_log("exceeded max query size, query will be truncated\n");
 			}
@@ -142,6 +157,9 @@ void ui_state_query_value(const uint32_t **value, size_t *n) {
 
 void ui_state_query_value_reset() {
 	g.query.n = 0;
+	g.query.offset = 0;
+	g.query.run = 0;
+	g.query.more_data = 1;
 }
 
 int ui_state_query_run(uint8_t **data, size_t *size, 
@@ -149,7 +167,6 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 	int result, id;
 	
 	result = g.query.run;
-	g.query.run = 0;
 
 	if(result != 0) {
 		*run_ch = g.query.run_ch;
@@ -167,6 +184,7 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 int ui_state_query_result_next(uint8_t **data, size_t *n, int *raw, int *id) {
 	if(db_query_step(&g.query.result) != 0) {
 		aug_log("ui_state: no more results\n");
+		g.query.more_data = 0;
 		return -1;
 	}
 

@@ -185,7 +185,7 @@ static void window_render_query() {
 	aug_lock_screen();
 
 	WMOVE(g.win, 0, 0);
-	WPRINTW(g.win, "CMD-KEY: exit\t^G: clear");
+	WPRINTW(g.win, "CMD-KEY: exit | ^G: clear | ^N: scroll down | ^P: scroll up");
 	WERASE(g.search_win);
 	WMOVE(g.search_win, 0, 0);
 	getmaxyx(g.search_win, rows, cols);
