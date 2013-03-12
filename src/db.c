@@ -432,11 +432,13 @@ void db_query_reset(struct db_query *query) {
 	DB_STMT_RESET(query->stmt);
 }
 
-void db_query_value(struct db_query *query, uint8_t **value, size_t *size, int *raw) {
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size, 
+		int *raw, int *id) {
 	const void *data;
 	int n;
 	
 	*raw = sqlite3_column_int(query->stmt, 1);
+	*id = sqlite3_column_int(query->stmt, 2);
 	if( (data = sqlite3_column_blob(query->stmt, 0)) == NULL)
 		err_panic(0, "column data is NULL: %s", sqlite3_errmsg(g.handle));
 	if( (n = sqlite3_column_bytes(query->stmt, 0)) < 0)
@@ -449,6 +451,22 @@ void db_query_value(struct db_query *query, uint8_t **value, size_t *size, int *
 	}
 }
 
+void db_update_chosen_at(int id) {
+	sqlite3_stmt *stmt;
+
+	DB_STMT_PREP(
+		"UPDATE blobs "
+			"SET chosen_at = strftime('%s','now') " 
+			"WHERE id = ?", 
+		&stmt
+	);
+	DB_BIND_INT(stmt, 1, id);
+	if(db_stmt_step(stmt) != -1)
+		err_panic(0, "didnt expect statement to return rows");
+
+	DB_STMT_FINALIZE(stmt);	
+}
+
 static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 #define DB_QUERY_MAX_INPUTS 9 /* max 9 queries and 9 tags */
 	char *q_score_fmt, *q_fmt, *t_score_fmt, *t_fmt;
@@ -457,7 +475,7 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		"(b.value LIKE '%%'||?%03d||'%%' OR t.name LIKE '%%'||?%03d||'%%')";
 	char tag_like[] = "(t.name LIKE '%%'||?%03d||'%%')";
 	const char fmt1[] = 
-		"SELECT DISTINCT b.value, b.raw, ((%s)*10 + (%s)) AS score "
+		"SELECT DISTINCT b.value, b.raw, b.id, ((%s)*10 + (%s)) AS score "
 		"FROM blobs b " 
 			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id " 
 			"INNER JOIN tags t ON bt.tag_id = t.id "

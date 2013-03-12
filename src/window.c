@@ -168,7 +168,7 @@ static void window_render_query() {
 	const uint32_t *query;
 	uint8_t *result;
 	size_t n, i, rsize;
-	int j, rows, cols, x, y, raw;
+	int j, rows, cols, x, y, raw, id;
 	char esc[5];
 	cchar_t cch;
 	attr_t attr, *ap;
@@ -212,7 +212,7 @@ finish_search_win:
 
 	aug_log("window: render results\n");
 	getmaxyx(g.result_win, rows, cols);
-	while(ui_state_query_result_next(&result, &rsize, &raw) == 0) {
+	while(ui_state_query_result_next(&result, &rsize, &raw, &id) == 0) {
 		aug_log("window: render query result\n");
 		getyx(g.result_win, y, x); 
 		if(y >= rows - 1)

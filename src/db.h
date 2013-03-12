@@ -23,9 +23,12 @@ void db_query_prepare(struct db_query *query, const uint8_t **queries, size_t nq
 int db_query_step(struct db_query *query);
 
 /* value will be set to a talloc'd buffer of size *size */
-void db_query_value(struct db_query *query, uint8_t **value, size_t *size, int *raw);
+void db_query_value(struct db_query *query, uint8_t **value, size_t *size, 
+		int *raw, int *id);
 void db_query_reset(struct db_query *query);
 void db_query_free(struct db_query *query);
+
+void db_update_chosen_at(int id);
 
 #endif
 

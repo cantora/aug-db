@@ -290,7 +290,7 @@ static void interact() {
 			UI_LOCK_PIPE(status);
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
-			if(ui_state_query_run(&data, &dsize, &raw, &run_ch, 1) != 0) {
+			if(ui_state_query_run(&data, &dsize, &raw, &run_ch) != 0) {
 				if(dsize > 0) {
 					write_data_to_term(data, dsize, raw, run_ch);					
 					talloc_free(data);
