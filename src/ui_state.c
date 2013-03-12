@@ -86,12 +86,13 @@ static void prepare_query() {
 static int ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
 	uint32_t ch;
-	int brk;
+	int brk, nop;
 	
 	if( (amt = fifo_amt(input)) < 1)
 		return 0;
 
 	brk = 0;
+	nop = 1;
 	for(i = 0; i < amt; i++) {
 		fifo_pop(input, &ch);
 		switch(ch) {
@@ -100,18 +101,28 @@ static int ui_state_consume_query(struct fifo *input) {
 			if(g.query.n > 0) {
 				g.query.n--;
 				g.query.offset = 0;
+				nop = 0;
 			}
 			break;
 		case 0x07: /* ^G */
-			ui_state_query_value_reset();
+			if(ui_state_query_value_reset())
+				nop = 0;
 			break;
 		case 0x10: /* ^P */
-			if(g.query.offset > 0)
+			if(g.query.offset > 0) {
 				g.query.offset -= 1;
+				nop = 0;
+			}
 			break;
 		case 0x0e: /* ^N */
-			if(g.query.more_data != 0)
+			if(g.query.more_data != 0) {
 				g.query.offset += 1;
+				nop = 0;
+			}
+			break;
+		case 0x03: /* ^C */
+			g.query.run = -1;
+			brk = 1; 
 			break;
 
 		default: /* truncate at query size limit for now */
@@ -120,17 +131,15 @@ static int ui_state_consume_query(struct fifo *input) {
 				if(g.query.n < ARRAY_SIZE(g.query.value)) {
 					g.query.value[g.query.n++] = ch;
 					g.query.offset = 0;
+					nop = 0;
 				}
 				else
-					aug_log("exceeded max query size, query will be truncated\n");
+					aug_log("exceeded max query size, query will be truncated\n"); 
 			}
 			else {
-				if(g.query.run != 0)
-					continue;
-
 				g.query.run = 1;
 				g.query.run_ch = ch;
-				brk = 1;
+				brk = 1; 
 			}
 		} /* switch(ch) */
 
@@ -140,8 +149,13 @@ static int ui_state_consume_query(struct fifo *input) {
 		}
 	} /* for i up to amt */
 
-	db_query_free(&g.query.result);
-	prepare_query();
+	if(nop == 0) {
+		db_query_free(&g.query.result);
+		prepare_query();
+	}
+	else {
+		db_query_reset(&g.query.result);
+	}
 
 	return i+1;
 }
@@ -155,11 +169,17 @@ void ui_state_query_value(const uint32_t **value, size_t *n) {
 	*n = g.query.n;
 }
 
-void ui_state_query_value_reset() {
+int ui_state_query_value_reset() {
+	int result;
+
+	result = ( g.query.n != 0 || g.query.offset != 0 );
+
 	g.query.n = 0;
 	g.query.offset = 0;
 	g.query.run = 0;
 	g.query.more_data = 1;
+
+	return result;
 }
 
 int ui_state_query_run(uint8_t **data, size_t *size, 
@@ -168,7 +188,7 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 	
 	result = g.query.run;
 
-	if(result != 0) {
+	if(result > 0) {
 		*run_ch = g.query.run_ch;
 		ui_state_query_result_reset();
 		if(ui_state_query_result_next(data, size, raw, &id) != 0)
@@ -177,6 +197,10 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 		ui_state_query_value_reset();
 		db_query_free(&g.query.result);
 		prepare_query();
+	}
+	else if(result < 0) {
+		g.query.run = 0;
+		*size = 0;
 	}
 
 	return result;
