@@ -230,8 +230,7 @@ finish_search_win:
 #define CHECK_FOR_SPACE() \
 	do { \
 		getyx(g.result_win, y, x); \
-		if(y >= rows - 1 && x >= cols - 4) { \
-			WPRINTW(g.result_win, "..."); \
+		if(y >= rows - 1 && x >= cols - 1) { \
 			goto update; \
 		} \
 	} while(0)
@@ -239,8 +238,11 @@ finish_search_win:
 		for(i = 0; i < rsize; i++) {
 			CHECK_FOR_SPACE();
 
-			if(raw == 0)
+			if(raw == 0) {
+				if(result[i] == '\n' && y >= rows - 1)
+					goto update;
 				WADDCH(g.result_win, result[i]);
+			}
 			else {
 				if(result[i] >= 0x20 && result[i] <= 0x7e)
 					WADDCH(g.result_win, result[i]);
