@@ -93,6 +93,11 @@ int window_start() {
 #undef WIN_COLS
 #undef WIN_SEARCH_ROW
 
+	/* TODO: turning this on causes keys to be
+	 * interpreted as unicode characters. at some 
+	 * point this should be turned off and we should
+	 * actually parse the keypad escape sequences 
+	 * manually */
 	if(keypad(stdscr, 1) == ERR)
 		err_panic(0, "failed to enable keypad");
 	
@@ -180,7 +185,7 @@ static void window_render_query() {
 	aug_lock_screen();
 
 	WMOVE(g.win, 0, 0);
-	WPRINTW(g.win, "^J: choose\t^G: clear");
+	WPRINTW(g.win, "CMD-KEY: exit\t^G: clear");
 	WERASE(g.search_win);
 	WMOVE(g.search_win, 0, 0);
 	getmaxyx(g.search_win, rows, cols);

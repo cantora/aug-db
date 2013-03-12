@@ -93,13 +93,11 @@ static int ui_state_consume_query(struct fifo *input) {
 	for(i = 0; i < amt; i++) {
 		fifo_pop(input, &ch);
 		switch(ch) {
-		case 0x0107: /* osx delete */
 		case 0x08: /* ^H */
 		case 0x7f: /* backspace */
 			if(g.query.n > 0)
 				g.query.n--;
 			break;
-		case 0x014a:
 		case 0x07: /* ^G */
 			g.query.n = 0;
 			break;
@@ -159,7 +157,8 @@ int ui_state_query_run(uint8_t **data, size_t *size,
 		if(ui_state_query_result_next(data, size, raw, &id) != 0)
 			return 0; /* no results, dont run. */
 		db_update_chosen_at(id);
-		ui_state_query_result_reset();
+		ui_state_query_value_reset();
+		prepare_query();
 	}
 
 	return result;
