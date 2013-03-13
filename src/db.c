@@ -86,11 +86,21 @@ static void db_query_fmt(size_t, size_t, char **);
 	} while(0)
 
 #define DB_BEGIN() \
-	DB_EXECUTE("BEGIN", "failed to begin db transaction")
+	do { \
+		aug_log("BEGIN transaction\n"); \
+		DB_EXECUTE("BEGIN", "failed to begin db transaction"); \
+	} while(0)
 #define DB_COMMIT() \
-	DB_EXECUTE("COMMIT", "failed to commit db transaction")
+	do { \
+		aug_log("COMMIT transaction\n"); \
+		DB_EXECUTE("COMMIT", "failed to commit db transaction"); \
+	} while(0)
+
 #define DB_ROLLBACK() \
-	DB_EXECUTE("ROLLBACK", "failed to rollback db transaction")
+	do { \
+		aug_log("ROLLBACK transaction\n"); \
+		DB_EXECUTE("ROLLBACK", "failed to rollback db transaction"); \
+	} while(0)
 
 int db_init(const char *fpath) {
 	if(sqlite3_open(fpath, &g.handle) != SQLITE_OK) {
@@ -471,6 +481,7 @@ void db_query_value(struct db_query *query, uint8_t **value, size_t *size,
 void db_update_chosen_at(int id) {
 	sqlite3_stmt *stmt;
 
+	DB_BEGIN();
 	DB_STMT_PREP(
 		"UPDATE blobs "
 			"SET chosen_at = strftime('%s','now') " 
@@ -482,6 +493,7 @@ void db_update_chosen_at(int id) {
 		err_panic(0, "didnt expect statement to return rows");
 
 	DB_STMT_FINALIZE(stmt);	
+	DB_COMMIT();
 }
 
 static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {

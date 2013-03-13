@@ -12,12 +12,14 @@
  * configured cleanup function, then signal the err_dispatch handler 
  */
 
-/* change back to this at stable version 
- * #define err_warn(_eno, ...) \
- *	err_log(__FILE__, __LINE__, _eno, __VA_ARGS__)
- */
+/* change back to this at stable version */
 #define err_warn(_eno, ...) \
-	err_panic(_eno, __VA_ARGS__)
+	err_log(__FILE__, __LINE__, _eno, __VA_ARGS__)
+
+/* strict version
+ * #define err_warn(_eno, ...) \
+ *	err_panic(_eno, __VA_ARGS__)
+ */
 
 #define err_panic(_eno, ...) \
 	do { \
