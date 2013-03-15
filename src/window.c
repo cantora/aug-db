@@ -14,6 +14,7 @@ static struct {
 } g;
 
 static void window_reset_vars();
+static void render_results(WINDOW *);
 
 int window_init() {
 	int status;
@@ -171,10 +172,8 @@ void window_refresh() {
 
 static void window_render_query() {
 	const uint32_t *query;
-	uint8_t *result;
-	size_t n, i, rsize;
-	int j, rows, cols, x, y, raw, id;
-	char esc[5];
+	size_t n, i;
+	int rows, cols, x, y;
 	cchar_t cch;
 	attr_t attr, *ap;
 	short pair, *pp;
@@ -196,7 +195,7 @@ static void window_render_query() {
 			/* if x >= cols-1-2 then the WPRINTW will fail */
 			if(y >= rows || x >= (cols-1-2) ) {
 				aug_log("exceeded window size of %d,%d\n", rows, cols);
-				goto finish_search_win;
+				break;
 			}
 
 			ap = &attr;
@@ -209,58 +208,11 @@ static void window_render_query() {
 				err_panic(0, "wadd_wch failed");
 		}
 
-finish_search_win:
 	WPRINTW(g.search_win, "':");
 
-	WERASE(g.result_win);
-	WMOVE(g.result_win, 0, 0);
+	render_results(g.result_win);
 
-	/*aug_log("window: render results\n");*/
-	getmaxyx(g.result_win, rows, cols);
-	while(ui_state_query_result_next(&result, &rsize, &raw, &id) == 0) {
-		/*aug_log("window: render query result\n");*/
-		getyx(g.result_win, y, x); 
-		if(y >= rows - 1)
-			goto update;
-
-		for(j = 0; j < cols; j++) {
-			WADDCH(g.result_win, '-');
-		}
-
-#define CHECK_FOR_SPACE() \
-	do { \
-		getyx(g.result_win, y, x); \
-		if(y >= rows - 1 && x >= cols - 1) { \
-			goto update; \
-		} \
-	} while(0)
-
-		for(i = 0; i < rsize; i++) {
-			CHECK_FOR_SPACE();
-
-			if(raw == 0) {
-				if(result[i] == '\n' && y >= rows - 1)
-					goto update;
-				WADDCH(g.result_win, result[i]);
-			}
-			else {
-				if(result[i] >= 0x20 && result[i] <= 0x7e)
-					WADDCH(g.result_win, result[i]);
-				else {
-					snprintf(esc, 5, "\\x%02x", result[i]);
-					for(j = 0; j < 4; j++) {
-						CHECK_FOR_SPACE();
-						WADDCH(g.result_win, esc[j]);
-					}
-				}
-			}
-		}
-		waddch(g.result_win, '\n');
-
-		talloc_free(result);
-	} /* while(query results) */
-
-update:
+	/* update */
 	wsyncup(g.result_win);
 	wcursyncup(g.result_win);
 	wsyncup(g.search_win);
@@ -269,6 +221,62 @@ update:
 	aug_screen_doupdate();
 	
 	aug_unlock_screen();	
+}
+
+static void render_results(WINDOW *win) {
+	int j, rows, cols, x, y, raw, id;
+	uint8_t *result;
+	size_t i, rsize;
+	char esc[5];
+
+	WERASE(win);
+	WMOVE(win, 0, 0);
+
+#define CHECK_FOR_SPACE() \
+	do { \
+		getyx(win, y, x); \
+		if(y >= rows - 1 && x >= cols - 1) { \
+			return; \
+		} \
+	} while(0)
+
+
+	/*aug_log("window: render results\n");*/
+	getmaxyx(win, rows, cols);
+	while(ui_state_query_result_next(&result, &rsize, &raw, &id) == 0) {
+		/*aug_log("window: render query result\n");*/
+		getyx(win, y, x); 
+		if(y >= rows - 1)
+			return;
+
+		for(j = 0; j < cols; j++) {
+			WADDCH(win, '-');
+		}
+
+		for(i = 0; i < rsize; i++) {
+			CHECK_FOR_SPACE();
+
+			if(raw == 0) {
+				if(result[i] == '\n' && y >= rows - 1)
+					return;
+				WADDCH(win, result[i]);
+			}
+			else {
+				if(result[i] >= 0x20 && result[i] <= 0x7e)
+					WADDCH(win, result[i]);
+				else {
+					snprintf(esc, 5, "\\x%02x", result[i]);
+					for(j = 0; j < 4; j++) {
+						CHECK_FOR_SPACE();
+						WADDCH(win, esc[j]);
+					}
+				}
+			}
+		}
+		waddch(win, '\n');
+
+		talloc_free(result);
+	} /* while(query results) */
 }
 
 void window_render() {
