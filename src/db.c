@@ -81,7 +81,7 @@ static void db_query_fmt(size_t, size_t, char **);
 #define DB_EXECUTE(_query, _err_msg) \
 	do { \
 		if(sqlite3_exec(g.handle, _query, NULL, NULL, NULL) != SQLITE_OK) { \
-			err_panic(0, _err_msg); \
+			err_panic(0, _err_msg ": %s", sqlite3_errmsg(g.handle) ); \
 		} \
 	} while(0)
 
