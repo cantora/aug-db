@@ -80,6 +80,7 @@ static void db_query_fmt(size_t, size_t, char **);
 
 #define DB_EXECUTE(_query, _err_msg) \
 	do { \
+		aug_log("execute query %s\n", _query); \
 		if(sqlite3_exec(g.handle, _query, NULL, NULL, NULL) != SQLITE_OK) { \
 			err_panic(0, _err_msg ": %s", sqlite3_errmsg(g.handle) ); \
 		} \
@@ -90,10 +91,21 @@ static void db_query_fmt(size_t, size_t, char **);
 		aug_log("BEGIN transaction\n"); \
 		DB_EXECUTE("BEGIN", "failed to begin db transaction"); \
 	} while(0)
+
 #define DB_COMMIT() \
 	do { \
 		aug_log("COMMIT transaction\n"); \
-		DB_EXECUTE("COMMIT", "failed to commit db transaction"); \
+		while(1) { \
+			switch(sqlite3_exec(g.handle, "COMMIT", NULL, NULL, NULL)) { \
+			case SQLITE_OK: \
+				break; \
+			case SQLITE_BUSY: \
+				/*fall through*/ \
+			default: \
+				err_panic(0, "failed to commit db transaction: %s", sqlite3_errmsg(g.handle) ); \
+			} \
+			break; \
+		} \
 	} while(0)
 
 #define DB_ROLLBACK() \
@@ -222,6 +234,7 @@ void db_free() {
 
 #define DB_STMT_PREP(_sql, _stmt_pptr) \
 	do { \
+		aug_log("prepare query %s\n", _sql); \
 		if(sqlite3_prepare_v2(g.handle, _sql, -1, _stmt_pptr, NULL) != SQLITE_OK) { \
 			err_panic(0, "failed to prepare %s: %s", \
 							_sql, sqlite3_errmsg(g.handle)); \
@@ -230,6 +243,7 @@ void db_free() {
 
 #define DB_STMT_FINALIZE(_stmt_ptr) \
 	do { \
+		aug_log("finalize stmt %p\n", _stmt_ptr); \
 		if(sqlite3_finalize(_stmt_ptr) != SQLITE_OK) { \
 			err_warn(0, "failed to finalize statement: %s", sqlite3_errmsg(g.handle)); \
 		} \
@@ -237,6 +251,7 @@ void db_free() {
 
 #define DB_STMT_RESET(_stmt_ptr) \
 	do { \
+		aug_log("reset stmt %p\n", _stmt_ptr); \
 		if(sqlite3_reset(_stmt_ptr) != SQLITE_OK) { \
 			err_panic(0, "expected reset to return SQLITE_OK: %s", sqlite3_errmsg(g.handle)); \
 		} \
@@ -245,6 +260,7 @@ void db_free() {
 static int db_stmt_step(sqlite3_stmt *stmt) {
 	int status;
 
+	aug_log("step stmt %p\n", stmt);
 	if( (status = sqlite3_step(stmt)) != SQLITE_ROW) {
 		if(status == SQLITE_DONE)
 			return -1;
@@ -257,6 +273,7 @@ static int db_stmt_step(sqlite3_stmt *stmt) {
 
 #define DB_STMT_EXEC(_stmt_ptr) \
 	do { \
+		aug_log("exec stmt %p\n", _stmt_ptr); \
 		if(db_stmt_step(_stmt_ptr) == 0) { \
 			err_panic(0, "expected SQLITE_DONE"); \
 		} \

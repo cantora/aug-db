@@ -15,6 +15,7 @@ int ui_state_init();
 void ui_state_free();
 int ui_state_consume(struct fifo *input);
 void ui_state_query_value(const uint32_t **value, size_t *n);
+/* returns true if the query was not already reset */
 int ui_state_query_value_reset();
 int ui_state_query_result_next(uint8_t **data, size_t *n, int *raw, int *id);
 void ui_state_query_result_reset();
