@@ -100,7 +100,7 @@ static void db_query_fmt(size_t, size_t, char **);
 			case SQLITE_OK: \
 				break; \
 			case SQLITE_BUSY: \
-				/*fall through*/ \
+				continue; \
 			default: \
 				err_panic(0, "failed to commit db transaction: %s", sqlite3_errmsg(g.handle) ); \
 			} \
