@@ -2,8 +2,13 @@
 
 #include "api_calls.h"
 #include "err.h"
+#include "encoding.h"
 
 #include <ccan/array_size/array_size.h>
+
+void query_init(struct query *q) {
+	query_clear(q);
+}
 
 int query_clear(struct query *q) {
 	int result;
@@ -17,8 +22,9 @@ int query_clear(struct query *q) {
 }
 
 void query_value(const struct query *q, const uint32_t **value, size_t *n) {
-	*value = q->value;
 	*n = q->n;
+	if(*n > 0) 
+		*value = q->value;
 }
 
 int query_delete(struct query *q) {
@@ -59,13 +65,13 @@ int query_add_ch(struct query *q, uint32_t ch) {
 	return 0;
 }
 
-int query_first_result(struct query *q, uint8_t **data, 
+/*int query_first_result(struct query *q, uint8_t **data, 
 		size_t *n, int *raw, int *id) {
 	
 	QUERY_FOREACH(q, data, n, raw, id) {
 		break;
 	}
-}
+}*/
 
 static void query_prepare_from_value(struct query *q) {
 	size_t obl;
@@ -91,13 +97,14 @@ void query_prepare(struct query *q) {
 	q->page_size = 0;
 }
 
-int query_next(struct query *q, uint8_t **data, size_t *n, int *raw, int *id) {
+int query_next(struct query *q, uint8_t **tal_data, size_t *n, 
+		int *raw, int *id) {
 	if(db_query_step(&q->result) != 0) {
 		aug_log("no more results\n");
 		return -1;
 	}
 
-	db_query_value(&q->result, data, n, raw, id);
+	db_query_value(&q->result, tal_data, n, raw, id);
 	q->page_size += 1;
 	return 0;
 }
@@ -107,4 +114,36 @@ int query_finalize(struct query *q) {
 
 	/* need to return a value to use this in foreach macro */
 	return 0;
+}
+
+int query_foreach_result(struct query *q, 
+		int (*fn)(uint8_t *data, size_t n, int raw, int id, int i, void *user),
+		void *user) {
+	uint8_t *data;
+	size_t n;
+	int raw, id, i, status;
+
+	query_prepare(q);
+
+	i = 0;
+	while(query_next(q, &data, &n, &raw, &id) == 0) {
+		status = (*fn)(data, n, raw, id, i++, user);
+		talloc_free(data);
+		if(status != 0)
+			break;
+	}
+	query_finalize(q);
+
+	return i;
+}
+
+int query_first_result(struct query *q, uint8_t **tal_data, 
+		size_t *n, int *raw, int *id) {
+	int result;
+
+	query_prepare(q);
+	result = query_next(q, tal_data, n, raw, id);
+	query_finalize(q);
+
+	return result;
 }

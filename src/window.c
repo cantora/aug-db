@@ -105,7 +105,6 @@ int window_start() {
 	aug_unlock_screen();
 
 	g.off = 0;
-	ui_state_query_result_reset();
 	WINDOW_UNLOCK(status);
 
 	return 0;
@@ -223,60 +222,68 @@ static void window_render_query() {
 	aug_unlock_screen();	
 }
 
-static void render_results(WINDOW *win) {
-	int j, rows, cols, x, y, raw, id;
-	uint8_t *result;
-	size_t i, rsize;
+static int result_cb_fn(uint8_t *result, size_t rsize, int raw, int id, int idx, void *user) {
+	int j, rows, cols, x, y;
+	size_t i;
 	char esc[5];
+	WINDOW *win;
+	(void)(idx);
+	(void)(id);
 
-	WERASE(win);
-	WMOVE(win, 0, 0);
+	win = (WINDOW *) user;
 
 #define CHECK_FOR_SPACE() \
 	do { \
 		getyx(win, y, x); \
 		if(y >= rows - 1 && x >= cols - 1) { \
-			return; \
+			return -1; \
 		} \
 	} while(0)
 
 
-	/*aug_log("window: render results\n");*/
 	getmaxyx(win, rows, cols);
-	while(ui_state_query_result_next(&result, &rsize, &raw, &id) == 0) {
-		/*aug_log("window: render query result\n");*/
-		getyx(win, y, x); 
-		if(y >= rows - 1)
-			return;
 
-		for(j = 0; j < cols; j++) {
-			WADDCH(win, '-');
+	/*aug_log("window: render query result\n");*/
+	getyx(win, y, x); 
+	if(y >= rows - 1)
+		return -1;
+
+	for(j = 0; j < cols; j++) {
+		WADDCH(win, '-');
+	}
+
+	for(i = 0; i < rsize; i++) {
+		CHECK_FOR_SPACE();
+
+		if(raw == 0) {
+			if(result[i] == '\n' && y >= rows - 1)
+				return -1;
+			WADDCH(win, result[i]);
 		}
-
-		for(i = 0; i < rsize; i++) {
-			CHECK_FOR_SPACE();
-
-			if(raw == 0) {
-				if(result[i] == '\n' && y >= rows - 1)
-					return;
+		else {
+			if(result[i] >= 0x20 && result[i] <= 0x7e)
 				WADDCH(win, result[i]);
-			}
 			else {
-				if(result[i] >= 0x20 && result[i] <= 0x7e)
-					WADDCH(win, result[i]);
-				else {
-					snprintf(esc, 5, "\\x%02x", result[i]);
-					for(j = 0; j < 4; j++) {
-						CHECK_FOR_SPACE();
-						WADDCH(win, esc[j]);
-					}
+				snprintf(esc, 5, "\\x%02x", result[i]);
+				for(j = 0; j < 4; j++) {
+					CHECK_FOR_SPACE();
+					WADDCH(win, esc[j]);
 				}
 			}
 		}
-		waddch(win, '\n');
+	}
+	waddch(win, '\n');
 
-		talloc_free(result);
-	} /* while(query results) */
+	return 0;
+}
+
+static void render_results(WINDOW *win) {
+	/*aug_log("window: render results\n");*/
+
+	WERASE(win);
+	WMOVE(win, 0, 0);
+
+	ui_state_query_foreach_result(result_cb_fn, win);
 }
 
 void window_render() {

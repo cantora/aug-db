@@ -1,3 +1,5 @@
+#include "encoding.h"
+
 #include "iconv.h"
 #include "err.h"
 
@@ -27,7 +29,7 @@ size_t encoding_wchar_to_utf8(uint8_t *utf8_data, size_t utf8_len,
 	char *ip, *op; 
 
 	ip = (char *) wchar_data;
-	op = (char *) value;
+	op = (char *) utf8_data;
 	ibl = wchar_len*sizeof(uint32_t);
 	obl = utf8_len;
 

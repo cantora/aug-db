@@ -16,33 +16,38 @@ struct query {
 	int page_size;
 };
 
+void query_init(struct query *q);
+/* returns non-zero if the query wasnt already cleared */
 int query_clear(struct query *q);
 void query_value(const struct query *q, const uint32_t **value, size_t *n);
-inline size_t query_size(const struct query *q) { return q->n; }
+static inline size_t query_size(const struct query *q) { return q->n; }
 /* returns non-zero if query was non-empty */
 int query_delete(struct query *q);
 /* returns non-zero if offset was decremented */
 int query_offset_decr(struct query *q);
 /* returns non-zero if offset was incremented */
 int query_offset_incr(struct query *q);
+/* returns non-zero if char was added */
+int query_add_ch(struct query *q, uint32_t ch);
+
 
 /* only public for use in foreach macro */
 void query_prepare(struct query *q);
-int query_next(struct query *q, uint8_t **data, size_t *n, int *raw, int *id);
+/* tal_data will point to a talloc'd buffer of size *n */
+int query_next(struct query *q, uint8_t **tal_data, size_t *n, 
+		int *raw, int *id);
 int query_finalize(struct query *q);
 
-/* this is macro is not thread safe. also dont 'return' out of it. */
-static int query_foreach_i;
-#define QUERY_FOREACH(query_p, data_pp, n_p, raw_p, id_p) \
-	for(	query_foreach_i = 0; query_prepare(query_p); \
-			i < 1; \
-			query_finalize(query_p) || i++) \
-		for(/* nothing */; \
-			query_next(query_p, data_pp, n_p, raw_p, id_p) == 0; \
-			/* nothing */; \
-		)
+/* returns the number of times @fn was called */
+int query_foreach_result(struct query *q, 
+		int (*fn)(uint8_t *data, size_t n, int raw, int id, int i, void *user),
+		void *user);
 
-int query_first_result(struct query *q, uint8_t **data, 
+/* make sure to call talloc_free(*tal_data) when done.
+ * returns zero if there is valid data.
+ */
+int query_first_result(struct query *q, uint8_t **tal_data, 
 		size_t *n, int *raw, int *id);
+
 
 #endif /* AUG_DB_QUERY_H */

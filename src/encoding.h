@@ -1,6 +1,9 @@
 #ifndef AUG_DB_ENCODING_H
 #define AUG_DB_ENCODING_H
 
+#include <stdint.h>
+#include <stddef.h>
+
 int encoding_init();
 void encoding_free();
 /* returns the number of bytes left in utf8_data */

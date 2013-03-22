@@ -41,7 +41,7 @@ void test1() {
 
 #define ADD_TEST_ENTRY(_idx) \
 	db_add( \
-		TEST_ENTRY_DATA(_idx), ARRAY_SIZE( TEST_ENTRY_DATA(_idx) )-1, \
+		TEST_ENTRY_DATA(_idx), ARRAY_SIZE( TEST_ENTRY_DATA(_idx) )-1, 0, \
 		TEST_ENTRY_TAGS(_idx), ARRAY_SIZE( TEST_ENTRY_TAGS(_idx) ) \
 	)
 
@@ -56,7 +56,7 @@ void test1() {
 	db_free();
 }
 
-void print_blob(const char *value, size_t size) {
+void print_blob(const uint8_t *value, size_t size) {
 	size_t i;
 	for(i = 0; i < size; i++) {
 		if(value[i] >= 0x20 && value[i] <= 0x7e)
@@ -69,17 +69,18 @@ void print_blob(const char *value, size_t size) {
 void test2() {
 	const char *queries[] = {"passwd"};
 	struct db_query q;
-	char *value;
+	uint8_t *value;
 	size_t size;
-	int count;
+	int count, raw, id;
 
 	db_init(fn);
 	diag("++++test2++++");	
 
-	db_query_prepare(&q, queries, ARRAY_SIZE(queries), NULL, 0);
+	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), NULL, 0);
 	count = 0;
 	while(db_query_step(&q) == 0) {
-		db_query_value(&q, &value, &size);
+		db_query_value(&q, &value, &size, &raw, &id);
+		ok1(raw == 0);
 		printf("#value: ");
 		print_blob(value, size);
 		printf("\n");
@@ -90,7 +91,7 @@ void test2() {
 	ok1(count == 3);
 	db_query_free(&q);
 
-#define TEST2AMT 1
+#define TEST2AMT 3 + 1
 	diag("----test2----\n#");
 	db_free();
 }
@@ -99,14 +100,12 @@ void test3() {
 	const char *queries[] = {"passwd"};
 	const char *tags[] = {"sed"};
 	struct db_query q;
-	char *value;
-	size_t size;
 	int count;
 
 	db_init(fn);
 	diag("++++test3++++");	
 
-	db_query_prepare(&q, queries, ARRAY_SIZE(queries), tags, ARRAY_SIZE(tags));
+	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), (const uint8_t **) tags, ARRAY_SIZE(tags));
 	count = 0;
 	while(db_query_step(&q) == 0) {
 		count++;
@@ -125,17 +124,18 @@ void test4() {
 	const char *queries[] = {"gues"};
 	const char *tags[] = {"cmdlin"};
 	struct db_query q;
-	char *value;
+	uint8_t *value;
 	size_t size;
-	int count;
+	int count, raw, id;
 
 	db_init(fn);
 	diag("++++test4++++");	
 
-	db_query_prepare(&q, queries, ARRAY_SIZE(queries), tags, ARRAY_SIZE(tags));
+	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), (const uint8_t **) tags, ARRAY_SIZE(tags));
 	count = 0;
 	while(db_query_step(&q) == 0) {
-		db_query_value(&q, &value, &size);
+		db_query_value(&q, &value, &size, &raw, &id);
+		ok1(raw == 0);
 		printf("#value: ");
 		print_blob(value, size);
 		printf("\n");
@@ -146,7 +146,7 @@ void test4() {
 	ok1(count == 1);	
 	db_query_free(&q);
 
-#define TEST4AMT 1
+#define TEST4AMT 1 + 1
 	diag("----test4----\n#");
 	db_free();
 }

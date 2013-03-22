@@ -16,7 +16,7 @@ CXX_CMD			= gcc $(CXX_FLAGS)
 
 SRCS			= $(notdir $(wildcard ./src/*.c) )
 SQLITE_OBJECTS	= $(BUILD)/sqlite3.o
-CCAN_MODULES	= tap str_talloc talloc array_size
+CCAN_MODULES	= tap str_talloc talloc array_size 
 OBJECTS			= $(patsubst %.c, $(BUILD)/%.o, $(SRCS) ) 
 OBJECTS			+=$(SQLITE_OBJECTS) 
 DEP_FLAGS		= -MMD -MP -MF $(patsubst %.o, %.d, $@)

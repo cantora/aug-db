@@ -4,6 +4,7 @@
 #include "err.h"
 #include "query.h"
 #include "db.h"
+#include "encoding.h"
 
 #include <ccan/array_size/array_size.h>
 
@@ -56,49 +57,42 @@ int ui_state_consume(struct fifo *input) {
 static int ui_state_consume_query(struct fifo *input) {
 	size_t i, amt;
 	uint32_t ch;
-	int brk, nop;
+	int brk;
 	
 	if( (amt = fifo_amt(input)) < 1)
 		return 0;
 
 	brk = 0;
-	nop = 1;
 	for(i = 0; i < amt; i++) {
 		fifo_pop(input, &ch);
 		switch(ch) {
 		case 0x08: /* ^H */
 		case 0x7f: /* backspace */
-			if(query_delete(&g.query.q) != 0)
-				nop = 0;
+			query_delete(&g.query_state.q);
 			break;
 		case 0x07: /* ^G */
-			if(ui_state_query_value_clear())
-				nop = 0;
+			ui_state_query_value_clear();
 			break;
 		case 0x10: /* ^P */
-			if(query_offset_decr(&g.query.q) != 0)
-				nop = 0;
+			query_offset_decr(&g.query_state.q);
 			break;
 		case 0x0e: /* ^N */
-			if(query_offset_incr(&g.query.q) != 0)
-				nop = 0;
+			query_offset_incr(&g.query_state.q);
 			break;
 		case 0x03: /* ^C */
-			g.query.run = -1;
+			g.query_state.run = -1;
 			brk = 1; 
 			break;
 
 		default: /* truncate at query size limit for now */
 			if(ch >= 0x20 && ch != 0x7f) {
 				/*aug_log("added query char: 0x%04x\n", ch);*/
-				if(query_add_ch(&g.query.q, ch) != 0)
-					nop = 0;
-				else
+				if(query_add_ch(&g.query_state.q, ch) == 0)
 					aug_log("exceeded max query size, query will be truncated\n"); 
 			}
 			else {
-				g.query.run = 1;
-				g.query.run_ch = ch;
+				g.query_state.run = 1;
+				g.query_state.run_ch = ch;
 				brk = 1; 
 			}
 		} /* switch(ch) */
@@ -109,16 +103,6 @@ static int ui_state_consume_query(struct fifo *input) {
 		}
 	} /* for i up to amt */
 
-	/*
-	if(nop == 0) {
-		db_query_free(&g.query.result);
-		prepare_query();
-	}
-	else {
-		db_query_reset(&g.query.result);
-		g.query.page_size = 0;
-	}*/
-
 	return i+1;
 }
 
@@ -126,28 +110,39 @@ ui_state_name ui_state_current() {
 	return g.current;
 }
 
-int ui_state_query_value_clear() {
-	g.query.run = 0;
-	return query_clear(&g.query.q);
+void ui_state_query_value(const uint32_t **value, size_t *n) {
+	query_value(&g.query_state.q, value, n);
 }
 
-int ui_state_query_run(uint8_t **data, size_t *size, 
+int ui_state_query_value_clear() {
+	g.query_state.run = 0;
+	return query_clear(&g.query_state.q);
+}
+
+int ui_state_query_run(uint8_t **tal_data, size_t *size, 
 		int *raw, uint32_t *run_ch) {
 	int result, id;
 	
-	result = g.query.run;
+	result = g.query_state.run;
 
 	if(result > 0) {
-		*run_ch = g.query.run_ch;
-		if(query_first_result(data, size, raw, &id) != 0)
+		*run_ch = g.query_state.run_ch;
+		if(query_first_result(&g.query_state.q, tal_data, size, raw, &id) != 0)
 			return 0; /* no results, dont run. */
 		db_update_chosen_at(id);
 		ui_state_query_value_clear();
 	}
 	else if(result < 0) {
-		g.query.run = 0;
+		g.query_state.run = 0;
 		*size = 0;
 	}
 
 	return result;
+}
+
+int ui_state_query_foreach_result(
+		int (*fn)(uint8_t *data, size_t n, int raw, int id, int i, void *user),
+		void *user) {
+
+	return query_foreach_result(&g.query_state.q, fn, user);
 }
