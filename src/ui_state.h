@@ -8,6 +8,7 @@
 
 typedef enum {
 	UI_STATE_QUERY = 0,
+	UI_STATE_HELP_QUERY,
 	UI_STATE_EDIT
 } ui_state_name;
 
@@ -28,5 +29,13 @@ int ui_state_query_run(uint8_t **tal_data, size_t *size, int *raw,
 int ui_state_query_foreach_result(
 		int (*fn)(uint8_t *data, size_t n, int raw, int id, int i, void *user),
 		void *user);
+
+void ui_state_help_query_reset();
+void ui_state_help_query_next();
+size_t ui_state_help_query_remain();
+void ui_state_help_query_value(const char **key, const char **desc);
+
+void ui_state_dims_changed();
+void ui_state_interact_end();
 
 #endif /* AUG_DB_UI_STATE_H */
