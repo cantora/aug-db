@@ -27,6 +27,8 @@ int query_delete(struct query *q);
 int query_offset_decr(struct query *q);
 /* returns non-zero if offset was incremented */
 int query_offset_incr(struct query *q);
+/* returns non-zero if offset was non-zero */
+int query_offset_reset(struct query *q);
 /* returns non-zero if char was added */
 int query_add_ch(struct query *q, uint32_t ch);
 

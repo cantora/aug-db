@@ -55,6 +55,15 @@ int query_offset_incr(struct query *q) {
 	return 0;	
 }
 
+int query_offset_reset(struct query *q) {
+	if(q->offset != 0) {
+		q->offset = 0;
+		return 1;	
+	}
+
+	return 0;
+}
+
 int query_add_ch(struct query *q, uint32_t ch) {
 	if(q->n < ARRAY_SIZE(q->value)) {
 		q->value[q->n++] = ch;

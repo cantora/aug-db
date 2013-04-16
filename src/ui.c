@@ -208,7 +208,7 @@ static int render() {
 	return 0;
 }
 
-static void write_data_to_term(uint8_t *data, size_t dsize, int raw, 
+static void write_data_to_term(const uint8_t *data, size_t dsize, int raw, 
 		uint32_t run_ch) {
 	int written;
 	size_t ibl, obl, status;
@@ -251,33 +251,34 @@ static void write_data_to_term(uint8_t *data, size_t dsize, int raw,
 
 }
 
-/* return non-zero if result was chosen or the user
- * wants to exit out of the interact window */
-static int use_result_if_chosen() {
-	uint8_t *data;
+static void use_chosen_result() {
+	const uint8_t *data;
 	size_t dsize;
 	uint32_t run_ch;
 	int status, raw;
 
-	if( (status = ui_state_query_run(&data, &dsize, &raw, &run_ch)) != 0) {
-		if(status > 0) {
-			if(dsize > 0) {
-				write_data_to_term(data, dsize, raw, run_ch);					
-				talloc_free(data);
-				/* maybe clear pipe here? */
-			}
+	status = ui_state_query_selected_result(&data, &dsize, &raw, &run_ch);
+	if(status == 0) {
+		if(dsize > 0) {
+			write_data_to_term(data, dsize, raw, run_ch);					
+			/* maybe clear pipe here? */
 		}
-	} /* if(ui_state_query_run) */
-	
-	return status;
+	}
 }
 
 static void act_on_state(int *interact_off, int *do_render) {
+	int cmd;
 
 	switch(ui_state_current()) {
 	case UI_STATE_QUERY:
 		aug_log("act on state: query\n");
-		*interact_off = use_result_if_chosen();
+		cmd = ui_state_query_run_cmd();
+		if(cmd == UI_QUERY_CMD_CHOOSE)
+			use_chosen_result();
+		
+		if(cmd == UI_QUERY_CMD_EXIT_INTERACT || cmd == UI_QUERY_CMD_CHOOSE)
+			*interact_off = 1;
+
 		break;
 	case UI_STATE_HELP_QUERY:
 		aug_log("act on state: help query\n");

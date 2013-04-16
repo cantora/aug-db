@@ -163,6 +163,44 @@ rollback:
 		err_warn(0, "failed to rollback: %s", sqlite3_errmsg(g.handle));
 fail:
 	err_warn(0, "failed to execute query %s: %s", query, sqlite3_errmsg(g.handle));
+	return -1;
+}
+
+static int db_migrate_v2() {
+	const char *query;
+
+	aug_log("migrate to schema v2\n");
+#define RUN_QM(_query) \
+	do { \
+		if(sqlite3_exec(g.handle, _query, NULL, NULL, NULL) != SQLITE_OK) { \
+			query = _query; \
+			goto rollback; \
+		} \
+	} while(0)
+
+	if(sqlite3_exec(g.handle, "BEGIN", NULL, NULL, NULL) != SQLITE_OK) {
+		query = "BEGIN";
+		goto fail;
+	}
+	RUN_QM( \
+		"ALTER TABLE blobs ADD COLUMN " \
+		"trash INTEGER NOT NULL ON CONFLICT ROLLBACK DEFAULT 0" \
+	);
+	RUN_QM(
+		"UPDATE admin SET " \
+		"version = 2, " \
+		"updated_at = strftime('%s', 'now') " \
+	);
+	RUN_QM("COMMIT");
+#undef RUN_QM
+
+	return 0;
+
+rollback:
+	if(sqlite3_exec(g.handle, "ROLLBACK", NULL, NULL, NULL) != SQLITE_OK)
+		err_warn(0, "failed to rollback: %s", sqlite3_errmsg(g.handle));
+fail:
+	err_warn(0, "failed to execute query %s: %s", query, sqlite3_errmsg(g.handle));
 	return -1;	
 }
 
@@ -175,17 +213,26 @@ static int db_migrate() {
 	}
 	aug_log("db version: %d\n", version);
 
-	switch(version) {
-	case 0:
-		if(db_migrate_v1() != 0)
+	while(version < 2) {
+		switch(version) {
+		case 0:
+			if(db_migrate_v1() != 0)
+				return -1;
+			break;
+		case 1: /* fall through */
+			if(db_migrate_v2() != 0)
+				return -1;
+			break;
+		default:
+			err_warn(0, "dont know how to migrate from db version %d", version);
 			return -1;
-	case 1: /* fall through */
-		/* current version */
-		break;
-	default:
-		err_warn(0, "dont know how to migrate from db version %d", version);
-		return -1;
-	}		
+		}
+
+		if(db_version(&version) != 0) {
+			err_warn(0, "failed to get db version number");
+			return -1;
+		}
+	}
 
 	return 0;
 }
@@ -405,6 +452,24 @@ static void db_tag_blob(int bid, const char **tags, size_t ntags) {
 	DB_STMT_FINALIZE(stmt);
 }
 
+void db_trash(int bid) {
+	sqlite3_stmt *stmt;
+
+	DB_BEGIN();
+	DB_STMT_PREP(
+		"UPDATE blobs "
+			"SET trash = 1 "
+			"WHERE id = ?", 
+		&stmt
+	);
+	DB_BIND_INT(stmt, 1, bid);
+	if(db_stmt_step(stmt) != -1)
+		err_panic(0, "didnt expect statement to return rows");
+
+	DB_STMT_FINALIZE(stmt);	
+	DB_COMMIT();
+}
+
 void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t ntags) {
 	int bid;
 	
@@ -416,6 +481,7 @@ void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t n
 
 #define DB_QUERY_COLUMNS "b.value, b.raw, b.id"
 #define DB_QUERY_LIMIT "LIMIT 200 OFFSET @offset"
+#define DB_NON_TRASH_BLOB "trash == 0"
 
 void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t **queries, 
 		size_t nqueries, const uint8_t **tags, size_t ntags) {
@@ -428,6 +494,7 @@ void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t
 			"SELECT DISTINCT " 
 				DB_QUERY_COLUMNS ", 0 AS score "
 			"FROM blobs b " 
+			"WHERE " DB_NON_TRASH_BLOB " "
 			"ORDER BY b.chosen_at DESC "
 			DB_QUERY_LIMIT ;
 	}
@@ -483,6 +550,9 @@ void db_query_value(struct db_query *query, uint8_t **value, size_t *size,
 	
 	*raw = sqlite3_column_int(query->stmt, 1);
 	*id = sqlite3_column_int(query->stmt, 2);
+	if(value == NULL)
+		return;
+
 	if( (data = sqlite3_column_blob(query->stmt, 0)) == NULL)
 		err_panic(0, "column data is NULL: %s", sqlite3_errmsg(g.handle));
 	if( (n = sqlite3_column_bytes(query->stmt, 0)) < 0)
@@ -526,7 +596,7 @@ static void db_query_fmt(size_t nqueries, size_t ntags, char **result) {
 		"FROM blobs b " 
 			"INNER JOIN fk_blobs_tags bt ON bt.blob_id = b.id " 
 			"INNER JOIN tags t ON bt.tag_id = t.id "
-		"WHERE %s AND (%s) "
+		"WHERE " DB_NON_TRASH_BLOB " AND %s AND (%s) "
 		"ORDER BY score DESC, b.chosen_at DESC "
 		DB_QUERY_LIMIT;
 
