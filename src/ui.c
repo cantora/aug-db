@@ -208,7 +208,7 @@ static int render() {
 	return 0;
 }
 
-static void write_data_to_term(uint8_t *data, size_t dsize, int raw, 
+static void write_data_to_term(const uint8_t *data, size_t dsize, int raw, 
 		uint32_t run_ch) {
 	int written;
 	size_t ibl, obl, status;
@@ -251,15 +251,50 @@ static void write_data_to_term(uint8_t *data, size_t dsize, int raw,
 
 }
 
+static void use_chosen_result() {
+	const uint8_t *data;
+	size_t dsize;
+	uint32_t run_ch;
+	int status, raw;
+
+	status = ui_state_query_selected_result(&data, &dsize, &raw, &run_ch);
+	if(status == 0) {
+		if(dsize > 0) {
+			write_data_to_term(data, dsize, raw, run_ch);					
+			/* maybe clear pipe here? */
+		}
+	}
+}
+
+static void act_on_state(int *interact_off, int *do_render) {
+	int cmd;
+
+	switch(ui_state_current()) {
+	case UI_STATE_QUERY:
+		aug_log("act on state: query\n");
+		cmd = ui_state_query_run_cmd();
+		if(cmd == UI_QUERY_CMD_CHOOSE)
+			use_chosen_result();
+		
+		if(cmd == UI_QUERY_CMD_EXIT_INTERACT || cmd == UI_QUERY_CMD_CHOOSE)
+			*interact_off = 1;
+
+		break;
+	case UI_STATE_HELP_QUERY:
+		aug_log("act on state: help query\n");
+		*do_render = 1;
+		break;
+	default:
+		err_warn(0, "unhandled state in act_on_state");
+	} /* switch(ui state) */
+}
+
 /* mtx is locked upon entry to this function.
  * this function should return with mtx locked.
  */
 static void interact() {
-	int status, amt, do_render, brk, raw;
-	uint32_t run_ch;
-	size_t dsize;
-	uint8_t *data;
-
+	int status, amt, do_render, brk;
+	
 	aug_log("interact: begin\n");
 	if(window_start() != 0) {
 		aug_log(WINDOW_TOO_SMALL_MSG);
@@ -278,6 +313,7 @@ static void interact() {
 		if(g.sig_dims_changed != 0) {
 			clr_sig_dims_changed();
 			window_end();
+			ui_state_dims_changed();
 			if(window_start() != 0) {
 				aug_log(WINDOW_TOO_SMALL_MSG);
 				goto refresh;
@@ -288,24 +324,18 @@ static void interact() {
 
 		while(fifo_amt(&g.input_pipe) > 0) {
 			UI_LOCK_PIPE(status);
+			aug_log("consume input\n");
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
-			if( (status = ui_state_query_run(&data, &dsize, &raw, &run_ch)) != 0) {
-				if(status > 0) {
-					if(dsize > 0) {
-						write_data_to_term(data, dsize, raw, run_ch);					
-						talloc_free(data);
-						brk = 1;
-						break; /* maybe clear pipe here? */
-					}
-				}
-				else {
-					brk = 1;
-					break;
-				}
-			} /* if(ui_state_query_run) */
+
+			/* we render on amt > 0, so if it is 0 and act_on_state
+			 * sets it to 1 we will render. */
+			aug_log("act on state\n");
+			act_on_state(&brk, &amt);
+			if(brk != 0)
+				break;
 			if(amt > 0) {
-				if(render() != 0) 
+				if(render() != 0)
 					goto refresh;  /* window_end() was called by render() */
 				do_render = 0;
 			}
@@ -330,12 +360,13 @@ static void interact() {
 		g.waiting = 0;
 		/*aug_log("interact: wokeup\n");*/
 	} /* while(1) */
-
+	ui_state_interact_end();
+		
 	window_end();
 refresh:
 	window_refresh();
 	aug_log("interact: end\n");
-}
+} /* interact */
 
 static void *ui_t_run(void *user) {
 	int status;

@@ -14,6 +14,7 @@ int db_init(const char *fpath);
 void db_free();
 
 void db_add(const void *data, size_t bytes, int raw, const char **tags, size_t ntags);
+void db_trash(int bid);
 
 /* queries and tags are utf-8 encoded strings */
 void db_query_prepare(struct db_query *query, unsigned int offset, const uint8_t **queries, 

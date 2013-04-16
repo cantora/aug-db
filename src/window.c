@@ -58,6 +58,7 @@ int window_start() {
 	WINDOW *win;
 	int status, rows, cols;
 
+	aug_log("window_start\n");
 	WINDOW_LOCK(status);
 	err_assert(g.off != 0);
 
@@ -82,7 +83,7 @@ int window_start() {
 	if(g.win == NULL) 
 		err_panic(0, "derwin was null\n");
 
-#define WIN_SEARCH_ROW 2
+#define WIN_SEARCH_ROW 0
 	g.search_win = derwin(g.win, 1, WIN_COLS, WIN_SEARCH_ROW, 0);
 	if(g.search_win == NULL) 
 		err_panic(0, "g.search_win was null\n");
@@ -113,6 +114,7 @@ int window_start() {
 void window_end() {
 	int status;
 
+	aug_log("window_end\n");
 	WINDOW_LOCK(status);
 	err_assert(g.off == 0);
 
@@ -137,12 +139,21 @@ void window_ncwin(WINDOW **win) {
 	*win = g.win;
 }
 
-void window_refresh() {
-	aug_lock_screen();
+static inline void aug_doupdate() {
 	aug_screen_panel_update();
 	aug_screen_doupdate();
+}
+
+void window_refresh() {
+	aug_lock_screen();
+	aug_doupdate();
 	aug_unlock_screen();
 	aug_log("refreshed window\n");
+}
+
+static inline void wsync(WINDOW *win) {
+	wsyncup(win);
+	wcursyncup(win);
 }
 
 #define WADDCH(_win, _ch) \
@@ -169,6 +180,63 @@ void window_refresh() {
 		} \
 	} while(0)
 
+static void window_render_help_query() {
+	size_t amt, remain, i;
+	int y, x, rows, cols;
+	const char *key, *desc;
+
+	/*aug_log("render help query\n");*/
+	aug_lock_screen();
+
+	WERASE(g.win);
+	WMOVE(g.win, 0, 0);
+
+	getmaxyx(g.win, rows, cols);
+	if(cols < 2)
+		goto unlock;
+		
+	getyx(g.win, y, x);
+	for(/*nop*/; (remain = ui_state_help_query_remain()) > 0;
+			ui_state_help_query_next()) {
+		/*aug_log("render help query line %d\n", y);*/
+
+		if(y == rows-1 && remain > 1) {
+			WPRINTW(g.win, "(next page: <SPACE>)");
+			
+			break;
+		}
+
+		ui_state_help_query_value(&key, &desc);
+		/* there should always be enough columns for this
+		 * b.c. window_start asserts cols >= 20 */
+		WPRINTW(g.win, "%s\t", key);
+		amt = strlen(desc);
+		for(i = 0; i < amt; i++) {
+			getyx(g.win, y, x);
+			if(x == cols-1) {
+				WADDCH(g.win, desc[i]);
+				break;
+			}
+			else if(x > cols-1)
+				break;
+				
+			WADDCH(g.win, desc[i]);
+		}
+
+		y += 1;
+		if(y >= rows)
+			break;
+
+		WMOVE(g.win, y, 0);
+		getyx(g.win, y, x);
+	}
+
+	wsync(g.win);
+	aug_doupdate();
+unlock:
+	aug_unlock_screen();
+}
+
 static void window_render_query() {
 	const uint32_t *query;
 	size_t n, i;
@@ -177,13 +245,12 @@ static void window_render_query() {
 	attr_t attr, *ap;
 	short pair, *pp;
 
+	/*aug_log("render query\n");*/
 	err_assert(g.win != NULL);
 
 	ui_state_query_value(&query, &n);
 	aug_lock_screen();
 
-	WMOVE(g.win, 0, 0);
-	WPRINTW(g.win, "^C: exit | ^G: clear | ^N: down | ^P: up");
 	WERASE(g.search_win);
 	WMOVE(g.search_win, 0, 0);
 	getmaxyx(g.search_win, rows, cols);
@@ -212,12 +279,9 @@ static void window_render_query() {
 	render_results(g.result_win);
 
 	/* update */
-	wsyncup(g.result_win);
-	wcursyncup(g.result_win);
-	wsyncup(g.search_win);
-	wcursyncup(g.search_win);
-	aug_screen_panel_update();
-	aug_screen_doupdate();
+	wsync(g.result_win);
+	wsync(g.search_win);
+	aug_doupdate();
 	
 	aug_unlock_screen();	
 }
@@ -274,6 +338,7 @@ static int result_cb_fn(uint8_t *result, size_t rsize, int raw, int id, int idx,
 	}
 	waddch(win, '\n');
 
+#undef CHECK_FOR_SPACE
 	return 0;
 }
 
@@ -292,6 +357,9 @@ void window_render() {
 	switch( (state = ui_state_current()) ) {
 	case UI_STATE_QUERY:
 		window_render_query();
+		break;
+	case UI_STATE_HELP_QUERY:
+		window_render_help_query();
 		break;
 	default:
 		err_panic(0, "invalid ui state %d", state);
