@@ -8,7 +8,7 @@ class MissingOption(Exception):
 	pass
 
 DEFAULT_DB_PATH = '~/.aug-db.sqlite'
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 def opt_parser():
 	parser = argparse.ArgumentParser(description='modify/view aug-db database')
@@ -48,7 +48,10 @@ def run(options):
 	
 	if not input:
 		raise MissingOption("an input file or input option must be provided")
-	
+
+	if options.tags is None or len(options.tags) < 1:
+		raise MissingOption("please provide at least one tag")
+
 	dbpath = os.path.expanduser(options.db)
 	log("dbpath: %s" % dbpath)
 	cx = sqlite3.connect(dbpath)
