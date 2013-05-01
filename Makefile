@@ -1,3 +1,4 @@
+OS_NAME			:= $(shell uname)
 
 AUG_DIR			= aug
 OUTPUT			= aug-db.so
@@ -25,6 +26,11 @@ TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
 TEST_LIB		= -pthread -lncursesw -lpanel $(LIB)
 
+ifeq ($(OS_NAME), Darwin)
+	CCAN_COMMENT_LIBRT		= $(CCAN_DIR)/tools/Makefile
+	CCAN_PATCH_CFLAGS		= $(CCAN_DIR)/tools/Makefile-ccan
+endif
+
 default: all
 
 .PHONY: all
@@ -43,18 +49,30 @@ $(BUILD)/%.o: src/%.c
 $(BUILD)/%.o: test/%.c $(LIBCCAN)
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 
-$(CCAN_DIR)/.touched:
-	rm -rf tmp_ccan/ $(CCAN_DIR)/
-	git clone 'https://github.com/rustyrussell/ccan.git' tmp_ccan
-	cd tmp_ccan/tools && ./create-ccan-tree -b make+config ../../$(CCAN_DIR) $(CCAN_MODULES)
-	rm -rf tmp_ccan/
-	cat $(CCAN_DIR)/Makefile-ccan | sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' \
-			> $(CCAN_DIR)/tmp.mk \
-		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_DIR)/Makefile-ccan && rm $(CCAN_DIR)/tmp.mk
-	touch $@
+$(CCAN_DIR):
+	git clone 'https://github.com/rustyrussell/ccan.git' $(CCAN_DIR)
 
-$(LIBCCAN): $(CCAN_DIR)/.touched
-	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC"
+$(CCAN_DIR)/.patch_rt: $(CCAN_DIR)
+	[ -n "$(CCAN_COMMENT_LIBRT)" ] \
+		&& sed 's/\(LDLIBS = -lrt\)/#\1/' $(CCAN_COMMENT_LIBRT) > $(CCAN_COMMENT_LIBRT).tmp \
+		&& mv $(CCAN_COMMENT_LIBRT).tmp $(CCAN_COMMENT_LIBRT) \
+		&& touch $@
+CCAN_PATCHES		+= $(CCAN_DIR)/.patch_rt
+
+$(CCAN_DIR)/.patch_cflags: $(CCAN_DIR)
+	[ -n $(CCAN_PATCH_CFLAGS) ] && \
+		cat $(CCAN_PATCH_CFLAGS) \
+		| sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' \
+			> $(CCAN_DIR)/tmp.mk \
+		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_PATCH_CFLAGS) \
+		&& rm $(CCAN_DIR)/tmp.mk
+	touch $@
+CCAN_PATCHES		+= $(CCAN_DIR)/.patch_cflags
+
+$(LIBCCAN): $(CCAN_DIR) $(CCAN_PATCHES)
+	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) -f ./tools/Makefile tools/configurator/configurator
+	$(CCAN_DIR)/tools/configurator/configurator > $(CCAN_DIR)/config.h
+	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC" 
 
 $(SQLITE_DIR):
 	mkdir -p $(SQLITE_DIR)_tmp
