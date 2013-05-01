@@ -29,11 +29,11 @@ ifeq ($(OS_NAME), Darwin)
 	CCAN_COMMENT_LIBRT		= $(CCAN_DIR)/tools/Makefile
 	CCAN_PATCH_CFLAGS		= $(CCAN_DIR)/tools/Makefile-ccan
 	SO_FLAGS	= -dynamiclib -Wl,-undefined,dynamic_lookup 
-	TEST_LIB	+= -lncurses
+	TEST_LIB	+= -lncurses -liconv
 else
 	SO_FLAGS	= -shared 
 	TEST_LIB	+= -lncurses
-	LIB			= -lrtw
+	LIB			= -lrt
 endif
 LIB				+= $(LIBCCAN)
 TEST_LIB		+= $(LIB)
