@@ -9,7 +9,6 @@ CCAN_DIR		= ./libccan
 LIBCCAN			= $(CCAN_DIR)/libccan.a
 SQLITE_DIR		= ./sqlite3
 INCLUDES		= -iquote"$(AUG_DIR)/include" -I$(CCAN_DIR) -iquote"src" -I$(SQLITE_DIR)
-LIB				= -lrt $(LIBCCAN)
 DEFINES			= -DAUG_DB_DEBUG
 OPTIMIZE		= -ggdb
 CXX_FLAGS		= -Wall -Wextra $(INCLUDES) $(OPTIMIZE) $(DEFINES)
@@ -24,55 +23,72 @@ DEP_FLAGS		= -MMD -MP -MF $(patsubst %.o, %.d, $@)
 
 TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
-TEST_LIB		= -pthread -lncursesw -lpanel $(LIB)
+TEST_LIB		= -pthread -lpanel
 
 ifeq ($(OS_NAME), Darwin)
 	CCAN_COMMENT_LIBRT		= $(CCAN_DIR)/tools/Makefile
 	CCAN_PATCH_CFLAGS		= $(CCAN_DIR)/tools/Makefile-ccan
+	SO_FLAGS	= -dynamiclib -Wl,-undefined,dynamic_lookup 
+	TEST_LIB	+= -lncurses
+else
+	SO_FLAGS	= -shared 
+	TEST_LIB	+= -lncurses
+	LIB			= -lrtw
 endif
+LIB				+= $(LIBCCAN)
+TEST_LIB		+= $(LIB)
 
 default: all
 
 .PHONY: all
-all: $(SQLITE_DIR) $(LIBCCAN) $(OUTPUT) 
+all: $(OUTPUT)
 
-$(OUTPUT): $(OBJECTS) 
-	$(CXX_CMD) -shared $+ $(LIB) -o $@
+$(OUTPUT): $(AUG_DIR) $(LIBCCAN) $(SQLITE_DIR) $(OBJECTS)
+	$(CXX_CMD) $(SO_FLAGS) $(OBJECTS) $(LIBCCAN) -o $@
 
 define cc-template
 $(CXX_CMD) $(DEP_FLAGS) -fPIC -c $< -o $@
 endef
 
-$(BUILD)/%.o: src/%.c
+$(BUILD)/%.o: src/%.c 
 	$(cc-template)
 
 $(BUILD)/%.o: test/%.c $(LIBCCAN)
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 
-$(CCAN_DIR):
-	git clone 'https://github.com/rustyrussell/ccan.git' $(CCAN_DIR)
+$(AUG_DIR):
+	@echo "aug not found at directory $(AUG_DIR)"
+	@false
 
-$(CCAN_DIR)/.patch_rt: $(CCAN_DIR)
-	[ -n "$(CCAN_COMMENT_LIBRT)" ] \
-		&& sed 's/\(LDLIBS = -lrt\)/#\1/' $(CCAN_COMMENT_LIBRT) > $(CCAN_COMMENT_LIBRT).tmp \
-		&& mv $(CCAN_COMMENT_LIBRT).tmp $(CCAN_COMMENT_LIBRT) \
+$(CCAN_DIR)/.touch:
+	git clone 'https://github.com/rustyrussell/ccan.git' $(CCAN_DIR) \
 		&& touch $@
-CCAN_PATCHES		+= $(CCAN_DIR)/.patch_rt
 
-$(CCAN_DIR)/.patch_cflags: $(CCAN_DIR)
-	[ -n $(CCAN_PATCH_CFLAGS) ] && \
+$(CCAN_DIR)/.patch_rt: $(CCAN_DIR)/.touch
+	[ -n "$(CCAN_COMMENT_LIBRT)" ] \
+		&& sed 's/\(LDLIBS = -lrt\)/#\1/' $(CCAN_COMMENT_LIBRT) \
+			> $(CCAN_COMMENT_LIBRT).tmp \
+		&& mv $(CCAN_COMMENT_LIBRT).tmp $(CCAN_COMMENT_LIBRT)
+	touch $@
+CCAN_PATCHES 	= $(CCAN_DIR)/.patch_cflags
+
+$(CCAN_DIR)/.patch_cflags: $(CCAN_DIR)/.touch
+	[ -n "$(CCAN_PATCH_CFLAGS)" ] && \
 		cat $(CCAN_PATCH_CFLAGS) \
 		| sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' \
 			> $(CCAN_DIR)/tmp.mk \
 		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_PATCH_CFLAGS) \
 		&& rm $(CCAN_DIR)/tmp.mk
 	touch $@
-CCAN_PATCHES		+= $(CCAN_DIR)/.patch_cflags
+CCAN_PATCHES	+=$(CCAN_DIR)/.patch_rt
 
-$(LIBCCAN): $(CCAN_DIR) $(CCAN_PATCHES)
+$(CCAN_DIR)/config.h: $(CCAN_PATCHES)
 	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) -f ./tools/Makefile tools/configurator/configurator
-	$(CCAN_DIR)/tools/configurator/configurator > $(CCAN_DIR)/config.h
+	$(CCAN_DIR)/tools/configurator/configurator > $@
+
+$(LIBCCAN): $(CCAN_DIR)/config.h
 	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC" 
+	touch $@
 
 $(SQLITE_DIR):
 	mkdir -p $(SQLITE_DIR)_tmp
@@ -81,7 +97,7 @@ $(SQLITE_DIR):
 		&& mv sqlite-amalgamation-* ../$(SQLITE_DIR) \
 		&& rm sqlite.zip && cd .. && rmdir $(SQLITE_DIR)_tmp
 
-$(BUILD)/%.o: $(SQLITE_DIR)/%.c $(SQLITE_DIR) 
+$(BUILD)/%.o: $(SQLITE_DIR)/%.c
 	$(cc-template)
 
 define test-program-template
