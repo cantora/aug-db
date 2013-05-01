@@ -54,7 +54,7 @@ $(LIBCCAN): $(CCAN_DIR)
 	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC"
 
 $(SQLITE_DIR):
-	mkdir $(SQLITE_DIR)_tmp
+	mkdir -p $(SQLITE_DIR)_tmp
 	curl 'http://www.sqlite.org/sqlite-amalgamation-3071502.zip' > $(SQLITE_DIR)_tmp/sqlite.zip
 	cd $(SQLITE_DIR)_tmp && unzip sqlite.zip \
 		&& mv sqlite-amalgamation-* ../$(SQLITE_DIR) \
