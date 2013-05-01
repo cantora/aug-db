@@ -275,8 +275,7 @@ static void act_on_state(int *interact_off, int *do_render) {
 		cmd = ui_state_query_run_cmd();
 		if(cmd == UI_QUERY_CMD_CHOOSE)
 			use_chosen_result();
-		
-		if(cmd == UI_QUERY_CMD_EXIT_INTERACT || cmd == UI_QUERY_CMD_CHOOSE)
+		else if(cmd == UI_QUERY_CMD_EXIT_INTERACT || cmd == UI_QUERY_CMD_CHOOSE)
 			*interact_off = 1;
 
 		break;
