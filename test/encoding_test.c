@@ -25,7 +25,7 @@ void test1() {
 	amt_left = encoding_wchar_to_utf8(utf8, ARRAY_SIZE(utf8), (uint32_t *) wchars, ARRAY_SIZE(wchars) );
 	ok1(amt_left > 0);
 	ok1(amt_left == 463);
-	diag("amt left: %u", amt_left);
+	diag("amt left: %zu", amt_left);
 	utf8[ARRAY_SIZE(utf8)-amt_left] = '\0';
 	diag("utf8 text: %s", utf8);
 
@@ -43,6 +43,7 @@ int main()
 		TESTN(1)
 	};
 
+	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {
 		total_tests += tests[i].amt;

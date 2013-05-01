@@ -213,7 +213,7 @@ void test4() {
 
 	ok1(query_first_result(&q, &data, &size, &raw, &id) == 0);
 	ok1(size > 0);
-	diag("size: %u", size);
+	diag("size: %zu", size);
 	printf("#data: ");
 	print_blob(data, size);
 	printf("\n");
@@ -239,6 +239,7 @@ int main()
 		TESTN(4)
 	};
 
+	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {
 		total_tests += tests[i].amt;
