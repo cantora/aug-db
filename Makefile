@@ -43,14 +43,17 @@ $(BUILD)/%.o: src/%.c
 $(BUILD)/%.o: test/%.c $(LIBCCAN)
 	$(CXX_CMD) $(DEP_FLAGS) -c $< -o $@
 
-$(CCAN_DIR):
+$(CCAN_DIR)/.touched:
+	rm -rf tmp_ccan/ $(CCAN_DIR)/
 	git clone 'https://github.com/rustyrussell/ccan.git' tmp_ccan
 	cd tmp_ccan/tools && ./create-ccan-tree -b make+config ../../$(CCAN_DIR) $(CCAN_MODULES)
 	rm -rf tmp_ccan/
-	cat $(CCAN_DIR)/Makefile-ccan | sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' > $(CCAN_DIR)/tmp.mk \
+	cat $(CCAN_DIR)/Makefile-ccan | sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' \
+			> $(CCAN_DIR)/tmp.mk \
 		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_DIR)/Makefile-ccan && rm $(CCAN_DIR)/tmp.mk
+	touch $@
 
-$(LIBCCAN): $(CCAN_DIR)
+$(LIBCCAN): $(CCAN_DIR)/.touched
 	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC"
 
 $(SQLITE_DIR):
