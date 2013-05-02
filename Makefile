@@ -38,6 +38,8 @@ endif
 LIB				+= $(LIBCCAN)
 TEST_LIB		+= $(LIB)
 
+VALGRIND		= valgrind --leak-check=yes --suppressions=./.aug-db.supp
+
 default: all
 
 .PHONY: all
@@ -105,7 +107,7 @@ $$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS))
 	$(CXX_CMD) $$+ $$(TEST_LIB) -o $$@
 
 $(1): $$(BUILD)/$(1)
-	$(BUILD)/$(1) 
+	$(VALGRIND) --log-file=$(BUILD)/$(1).grind $(BUILD)/$(1) 
 endef
 
 .PHONY: run-tests

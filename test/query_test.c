@@ -87,6 +87,7 @@ void test1() {
 	diag("++++test1++++");	
 	diag("test basics");
 
+	memset(&q, 0, sizeof(q));
 	query_init(&q);
 	ok1(query_clear(&q) == 0);
 
@@ -133,6 +134,7 @@ void test2() {
 	diag("++++test2++++");	
 	diag("test non-empty query value");
 
+	memset(&q, 0, sizeof(q));
 	query_init(&q);
 
 	for(i = 0; i < ARRAY_SIZE(value)-1; i++) {
@@ -187,6 +189,7 @@ void test3() {
 	diag("++++test3++++");	
 	diag("test query_foreach_result");
 
+	memset(&q, 0, sizeof(q));
 	query_init(&q);
 
 	ok1(query_foreach_result(&q, cb_fn, (void *)0xc0ffee) == 4);
@@ -207,6 +210,7 @@ void test4() {
 	diag("++++test4++++");	
 	diag("test query_first_result");
 
+	memset(&q, 0, sizeof(q));
 	query_init(&q);
 	for(i = 0; i < ARRAY_SIZE(value)-1; i++) {
 		ok1(query_add_ch(&q, value[i]) != 0);

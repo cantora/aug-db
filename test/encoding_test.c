@@ -46,7 +46,6 @@ int main()
 	};
 
 	setlocale(LC_ALL,"");
-
 	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {
