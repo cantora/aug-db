@@ -162,6 +162,7 @@ int main()
 		TESTN(4)
 	};
 
+	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {
 		total_tests += tests[i].amt;
