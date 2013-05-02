@@ -5,6 +5,7 @@
 #include <ccan/array_size/array_size.h>
 #include <time.h>
 #include <string.h>
+#include <locale.h>
 
 #include "test.h"
 #include "fifo.h"
@@ -150,6 +151,7 @@ int main()
 		TESTN(3)
 	};
 
+	setlocale(LC_ALL,"");
 	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {

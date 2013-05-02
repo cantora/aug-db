@@ -7,6 +7,7 @@
 #include <ccan/str/str.h>
 #include <time.h>
 #include <unistd.h>
+#include <locale.h>
 
 #include "test.h"
 #include "db.h"
@@ -162,6 +163,7 @@ int main()
 		TESTN(4)
 	};
 
+	setlocale(LC_ALL,"");
 	total_tests = 0;
 	len = ARRAY_SIZE(tests);
 	for(i = 0; i < len; i++) {
