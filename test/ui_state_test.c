@@ -18,7 +18,7 @@ void test1() {
 	struct fifo p1;
 	int buf1[256];
 	int outbuf1[256];
-	const int *query;
+	const uint32_t *query;
 	size_t i, query_len;
 	const char queries[] = "ssh\nfind / -name\n\recho 'stuff'\r\nman junk\r";
 	int iqueries[ARRAY_SIZE(queries)-1];
@@ -33,51 +33,49 @@ void test1() {
 	
 	ui_state_init();
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(0) == 0);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 0);
 
 	ok1(ui_state_consume(&p1) == 4);
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(1) == 1);
-	ok1(ui_state_query_run(0) == 0);
+	
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 3);
 	ok1(memcmp(query, iqueries, 3) == 0);
-	ui_state_query_value_reset();
+	ui_state_query_value_clear();
+
 	fifo_peek_all(&p1, outbuf1);
 	ok1(memcmp(outbuf1, iqueries + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1) == 0);
 	
 	ok1(ui_state_consume(&p1) == 13);
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 12);
 	ok1(memcmp(query, iqueries+4, 12) == 0);
-	ui_state_query_value_reset();
+	ui_state_query_value_clear();
 	fifo_peek_all(&p1, outbuf1);
 	ok1(memcmp(outbuf1, iqueries + 4 + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1 - 4) == 0);
 
-	ok1(ui_state_consume(&p1) == 14);
+	ok1(ui_state_consume(&p1) == 1);
+	ok1(ui_state_consume(&p1) == 13);
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 12);
 	ok1(memcmp(query, iqueries+18, 12) == 0);
-	ui_state_query_value_reset();
+	ui_state_query_value_clear();
 	fifo_peek_all(&p1, outbuf1);
 	ok1(memcmp(outbuf1, iqueries + 18 + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1 - 18) == 0);
 
-	ok1(ui_state_consume(&p1) == 10);
+	ok1(ui_state_consume(&p1) == 1);
+	ok1(ui_state_consume(&p1) == 9);
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(1) == 1);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 8);
 	ok1(memcmp(query, iqueries+32, 8) == 0);
-	ui_state_query_value_reset();
+	ui_state_query_value_clear();
 	fifo_peek_all(&p1, outbuf1);
 	ok1(memcmp(outbuf1, iqueries + 32 + query_len+1, 
 			ARRAY_SIZE(iqueries) - query_len-1 - 32) == 0);
@@ -85,11 +83,10 @@ void test1() {
 	ok1(fifo_amt(&p1) == 0);
 	ok1(ui_state_consume(&p1) == 0);
 	ok1(ui_state_current() == UI_STATE_QUERY);
-	ok1(ui_state_query_run(0) == 0);
 	ui_state_query_value(&query, &query_len);
 	ok1(query_len == 0);
 	
-#define TEST1AMT 3 + 7 + 6 + 6 + 6 + 5
+#define TEST1AMT 2 + 2 + 2 + 1 + 5 + 6 + 6 + 4
 	diag("----test1----\n#");
 }
 

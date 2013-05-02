@@ -7,7 +7,7 @@
 #include <ccan/talloc/talloc.h>
 #include <ccan/str/str.h>
 
-#define AUG_DB_SCHEMA_VERSION 1
+#define AUG_DB_SCHEMA_VERSION 2
 /* SCHEMA
  *
  * version 1:
