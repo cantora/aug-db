@@ -6,6 +6,7 @@
 #include <ccan/array_size/array_size.h>
 #include <ccan/str/str.h>
 #include <unistd.h>
+#include <locale.h>
 
 #include "test.h"
 #include "encoding.h"
@@ -22,7 +23,8 @@ void test1() {
 
 	ok1(encoding_init() == 0);
 	
-	amt_left = encoding_wchar_to_utf8(utf8, ARRAY_SIZE(utf8), (uint32_t *) wchars, ARRAY_SIZE(wchars) );
+	amt_left = encoding_wchar_to_utf8(utf8, ARRAY_SIZE(utf8), (uint32_t *) wchars,
+			ARRAY_SIZE(wchars) );
 	ok1(amt_left > 0);
 	ok1(amt_left == 463);
 	diag("amt left: %zu", amt_left);
@@ -42,6 +44,8 @@ int main()
 	struct test tests[] = {
 		TESTN(1)
 	};
+
+	setlocale(LC_ALL,"");
 
 	total_tests = 0;
 	len = ARRAY_SIZE(tests);
