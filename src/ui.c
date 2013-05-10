@@ -53,8 +53,10 @@ int ui_init() {
 	clr_sig_dims_changed();
 	if(pthread_mutex_init(&g.mtx, NULL) != 0)
 		return -1;
-	if(pthread_cond_init(&g.wakeup, NULL) != 0)
+	if(pthread_mutex_init(&g.pipe_mtx, NULL) != 0)
 		goto cleanup_mtx;
+	if(pthread_cond_init(&g.wakeup, NULL) != 0)
+		goto cleanup_both_mtx;
 
 	if( (g.cd = iconv_open("WCHAR_T", "UTF8")) == ((iconv_t) -1) )
 		goto cleanup_cond;
@@ -82,6 +84,8 @@ cleanup_iconv:
 		err_warn(errno, "failed to close iconv descriptor");
 cleanup_cond:
 	pthread_cond_destroy(&g.wakeup);
+cleanup_both_mtx:
+	pthread_mutex_destroy(&g.pipe_mtx);
 cleanup_mtx:
 	pthread_mutex_destroy(&g.mtx);
 
@@ -116,6 +120,8 @@ void ui_free() {
 		err_warn(errno, "failed to close iconv descriptor");
 	if( (status = pthread_cond_destroy(&g.wakeup)) != 0)
 		err_warn(status, "failed to destroy ui condition");
+	if( (status = pthread_mutex_destroy(&g.pipe_mtx)) != 0)
+		err_warn(status, "failed to destroy pipe mutex");
 	if( (status = pthread_mutex_destroy(&g.mtx)) != 0)
 		err_warn(status, "failed to destroy ui mutex");
 
