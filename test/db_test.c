@@ -17,7 +17,7 @@ struct test {
 	int amt;
 };
 
-const char *fn = "/tmp/db_test.sqlite";
+const char *FILENAME = "/tmp/db_test.sqlite";
 
 #define TEST_ENTRY_DATA(_num) \
 	entry ## _num ## data
@@ -36,8 +36,8 @@ TEST_ENTRY(4, "sed -i 's/old/new/g' file", "in place sed", "sed", "cmdline examp
 
 void test1() {
 
-	unlink(fn);
-	db_init(fn);
+	unlink(FILENAME);
+	db_init(FILENAME);
 	diag("++++test1++++");	
 
 #define ADD_TEST_ENTRY(_idx) \
@@ -74,7 +74,7 @@ void test2() {
 	size_t size;
 	int count, raw, id;
 
-	db_init(fn);
+	db_init(FILENAME);
 	diag("++++test2++++");	
 
 	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), NULL, 0);
@@ -103,7 +103,7 @@ void test3() {
 	struct db_query q;
 	int count;
 
-	db_init(fn);
+	db_init(FILENAME);
 	diag("++++test3++++");	
 
 	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), (const uint8_t **) tags, ARRAY_SIZE(tags));
@@ -129,7 +129,7 @@ void test4() {
 	size_t size;
 	int count, raw, id;
 
-	db_init(fn);
+	db_init(FILENAME);
 	diag("++++test4++++");	
 
 	db_query_prepare(&q, 0, (const uint8_t **) queries, ARRAY_SIZE(queries), (const uint8_t **) tags, ARRAY_SIZE(tags));

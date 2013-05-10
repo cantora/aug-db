@@ -25,20 +25,24 @@ TESTS 			= $(notdir $(patsubst %.c, %, $(wildcard ./test/*_test.c) ) )
 TEST_OUTPUTS	= $(foreach test, $(TESTS), $(BUILD)/$(test))
 TEST_LIB		= -pthread -lpanel
 
+VALGRIND		= valgrind --leak-check=yes --suppressions=./.aug-db.supp
+
 ifeq ($(OS_NAME), Darwin)
 	CCAN_COMMENT_LIBRT		= $(CCAN_DIR)/tools/Makefile
 	CCAN_PATCH_CFLAGS		= $(CCAN_DIR)/tools/Makefile-ccan
 	SO_FLAGS	= -dynamiclib -Wl,-undefined,dynamic_lookup 
 	TEST_LIB	+= -lncurses -liconv
+	VALGRIND	+= --dsymutil=yes
+#	on OSX running valgrind with sqlite3 causes a segfault
+	VALGRIND_OK	= $(filter-out db_test query_test, $(TESTS))
 else
 	SO_FLAGS	= -shared 
 	TEST_LIB	+= -lncurses
 	LIB			= -lrt
+	VALGRIND_OK	= $(TESTS)
 endif
 LIB				+= $(LIBCCAN)
 TEST_LIB		+= $(LIB)
-
-VALGRIND		= valgrind --leak-check=yes --suppressions=./.aug-db.supp
 
 default: all
 
@@ -107,14 +111,23 @@ $$(BUILD)/$(1): $$(BUILD)/$(1).o $$(filter-out $$(BUILD)/globals.o, $$(OBJECTS))
 	$(CXX_CMD) $$+ $$(TEST_LIB) -o $$@
 
 $(1): $$(BUILD)/$(1)
-	$(VALGRIND) --log-file=$(BUILD)/$(1).grind $(BUILD)/$(1) 
-endef
+	$(BUILD)/$(1)
 
-.PHONY: run-tests
-run-tests: tests $(foreach test, $(TEST_OUTPUTS), $(notdir $(test) ) )
+valgrind-$(1): $$(BUILD)/$(1)
+	$(VALGRIND) --log-file=$(BUILD)/$(1).grind $(BUILD)/$(1)
+	@if [ -n "$$$$(grep -E 'ERROR SUMMARY: [1-9][0-9]* errors' -o $(BUILD)/$(1).grind)" ]; then \
+		echo $$@ has valgrind errors; \
+		false; \
+	fi
+endef
 
 .PHONY: tests
 tests: $(TESTS)
+	@echo all tests ok
+
+.PHONY: tests
+valgrind-tests: $(foreach test, $(VALGRIND_OK), valgrind-$(test))
+	@echo all tests ok under valgrind
 
 .PHONY: $(TESTS)
 $(foreach test, $(TESTS), $(eval $(call test-program-template,$(test)) ) )
