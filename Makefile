@@ -29,7 +29,8 @@ VALGRIND		= valgrind --leak-check=yes --suppressions=./.aug-db.supp
 
 ifeq ($(OS_NAME), Darwin)
 	CCAN_COMMENT_LIBRT		= $(CCAN_DIR)/tools/Makefile
-	CCAN_PATCH_CFLAGS		= $(CCAN_DIR)/tools/Makefile-ccan
+	CCAN_PATCHES			+= $(CCAN_DIR)/.patch_rt
+
 	SO_FLAGS	= -dynamiclib -Wl,-undefined,dynamic_lookup 
 	TEST_LIB	+= -lncurses -liconv
 	VALGRIND	+= --dsymutil=yes
@@ -37,7 +38,7 @@ ifeq ($(OS_NAME), Darwin)
 	VALGRIND_OK	= $(filter-out db_test query_test, $(TESTS))
 else
 	SO_FLAGS	= -shared 
-	TEST_LIB	+= -lncurses
+	TEST_LIB	+= -lncursesw
 	LIB			= -lrt
 	VALGRIND_OK	= $(TESTS)
 endif
@@ -66,34 +67,28 @@ $(AUG_DIR):
 	@echo "aug not found at directory $(AUG_DIR)"
 	@false
 
-$(CCAN_DIR)/.touch:
-	git clone 'https://github.com/rustyrussell/ccan.git' $(CCAN_DIR) \
-		&& touch $@
+.PHONY: clean_ccan
+clean_ccan:
+	rm -rf $(CCAN_DIR)
+
+$(CCAN_DIR)/.touch: 
+	rm -rf $(CCAN_DIR)
+	git clone 'https://github.com/cantora/ccan.git' $(CCAN_DIR)
+	cd $(CCAN_DIR) && git checkout cantora
+	touch $@
 
 $(CCAN_DIR)/.patch_rt: $(CCAN_DIR)/.touch
-	[ -n "$(CCAN_COMMENT_LIBRT)" ] \
-		&& sed 's/\(LDLIBS = -lrt\)/#\1/' $(CCAN_COMMENT_LIBRT) \
-			> $(CCAN_COMMENT_LIBRT).tmp \
-		&& mv $(CCAN_COMMENT_LIBRT).tmp $(CCAN_COMMENT_LIBRT)
+	sed 's/\(LDLIBS = -lrt\)/#\1/' $(CCAN_COMMENT_LIBRT) \
+			> $(CCAN_COMMENT_LIBRT).tmp
+	mv $(CCAN_COMMENT_LIBRT).tmp $(CCAN_COMMENT_LIBRT)
 	touch $@
-CCAN_PATCHES 	= $(CCAN_DIR)/.patch_cflags
 
-$(CCAN_DIR)/.patch_cflags: $(CCAN_DIR)/.touch
-	[ -n "$(CCAN_PATCH_CFLAGS)" ] && \
-		cat $(CCAN_PATCH_CFLAGS) \
-		| sed 's/CCAN_CFLAGS *=/override CCAN_CFLAGS +=/' \
-			> $(CCAN_DIR)/tmp.mk \
-		&& cp $(CCAN_DIR)/tmp.mk $(CCAN_PATCH_CFLAGS) \
-		&& rm $(CCAN_DIR)/tmp.mk
-	touch $@
-CCAN_PATCHES	+=$(CCAN_DIR)/.patch_rt
-
-$(CCAN_DIR)/config.h: $(CCAN_PATCHES)
+$(CCAN_DIR)/config.h: $(CCAN_DIR)/.touch $(CCAN_PATCHES)
 	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) -f ./tools/Makefile tools/configurator/configurator
 	$(CCAN_DIR)/tools/configurator/configurator > $@
 
 $(LIBCCAN): $(CCAN_DIR)/config.h
-	cd $(CCAN_DIR) && $(MAKE) $(MFLAGS) CCAN_CFLAGS="-fPIC" 
+	cd $(CCAN_DIR) && CFLAGS="-fPIC" $(MAKE) $(MFLAGS)
 	touch $@
 
 $(SQLITE_DIR):
@@ -133,8 +128,7 @@ valgrind-tests: $(foreach test, $(VALGRIND_OK), valgrind-$(test))
 $(foreach test, $(TESTS), $(eval $(call test-program-template,$(test)) ) )
 
 .PHONY: libclean
-libclean: clean
-	rm -rf $(CCAN_DIR)
+libclean: clean clean_ccan
 	rm -rf $(SQLITE_DIR)
 
 .PHONY: clean
