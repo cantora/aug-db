@@ -28,3 +28,44 @@ aug configuration file:
                aug-db is `^R`. Run `aug --char-rep` to see a list of key name
                strings that aug understands.
 
+## usage
+To put stuff in your database you can use the `aug-db` script in the script
+directory of the source tree. Each item in your database is a blob of text
+and a set of tags describing it. For example you could run the following
+to save the skeleton of a bash 'for' loop in your database:  
+```
+$> ./aug-db -i '{ for i in {1..10}; do echo $i; done; }' -t bash 'command line' code 'for loop'
+added new blob to db
+```  
+Here we add an entry with -i flag and store it with a list of tags using the -t
+flag. For more usage information from this script run `./aug-db -h`.
+
+After aug has loaded, at any time you can use the command key extension to bring
+up the aug-db UI. For example, if your aug command key is `^B` and the aug-db
+extension is left as the default `^R`, you can type `^B ^R` and you will see the
+aug-db UI. The UI simply shows you a list of top results from your database, and
+will filter those results based on any text you type. If you press any non-text
+key such as <enter>, `^J`, `^A`, etc... aug-db will insert the text of the 
+top-most result into the terminal and exit the UI. It will also insert the 
+non-text key you pressed; that is, if you pressed enter the text will be inserted
+into the terminal followed by an enter key. This is similar to the bash history
+feature, such that if you press enter while on a search entry it will immediately
+run the command. Similary, pressing `^A` will insert the text into the terminal
+followed by a `^A` which will set your cursor at the beginning of the prompt if
+you are in a shell.
+
+There are several special non-text keys that will not cause aug-db to insert the
+text of the top-most entry, but will instead invoke a UI command. The following
+keys will control the aug-db UI as described:
+ * `^C`:     closes the aug-db UI window.  
+ * `^G`:     clears the current search text.  
+ * `^N`:     moves down through search results.  
+ * `^P`:     moves up through search results.  
+ * `^]`:     moves selected result into the trash. The "trash" is simply a 
+             boolean SQL field. To un-delete something you can open your sqlite
+             database and set the "trash" field to 0. To delete something
+             forever, you should open your sqlite DB and delete the actual row
+             in the 'blobs' table.  
+ * `^/`:     displays a help screen with information on these command keys.  
+
+
