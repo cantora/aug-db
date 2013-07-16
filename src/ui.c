@@ -63,7 +63,19 @@ DEF_CLR_SIG_FN(cmd_key)
 DEF_SET_SIG_FN(dims_changed)
 DEF_CLR_SIG_FN(dims_changed)
 
+#define UI_LOCK(_status) \
+	AUG_DB_LOCK(&g.mtx, _status, "failed to lock ui mutex")
+#define UI_UNLOCK(_status) \
+	AUG_DB_UNLOCK(&g.mtx, _status, "failed to unlock ui mutex")
+
+#define UI_LOCK_PIPE(_status) \
+	AUG_DB_LOCK(&g.pipe_mtx, _status, "failed to lock pipe mutex")
+#define UI_UNLOCK_PIPE(_status) \
+	AUG_DB_UNLOCK(&g.pipe_mtx, _status, "failed to unlock pipe mutex")
+
 int ui_init() {
+	int status;
+
 	g.shutdown = 0;
 	g.waiting = 0;
 	clr_sig_cmd_key();
@@ -87,8 +99,16 @@ int ui_init() {
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
-	while(g.waiting == 0) /* TODO: use the lock here for good measure */
+
+	while(1) {
+		UI_LOCK(status);
+		if(g.waiting == 1) {
+			UI_UNLOCK(status);
+			break;
+		}
+		UI_UNLOCK(status);
 		util_usleep(0, 10000);
+	}
 
 	return 0;
 
@@ -114,7 +134,7 @@ void ui_free() {
 	int status;
 
 	aug_log("ui free\n");
-	aug_log("kill ui thread\n");
+	aug_log("shutdown ui thread\n");
 	ui_lock();
 	g.shutdown = 1;
 	if(g.waiting != 0) {
@@ -143,16 +163,6 @@ void ui_free() {
 		err_warn(status, "failed to destroy ui mutex");
 
 }
-
-#define UI_LOCK(_status) \
-	AUG_DB_LOCK(&g.mtx, _status, "failed to lock ui mutex")
-#define UI_UNLOCK(_status) \
-	AUG_DB_UNLOCK(&g.mtx, _status, "failed to unlock ui mutex")
-
-#define UI_LOCK_PIPE(_status) \
-	AUG_DB_LOCK(&g.pipe_mtx, _status, "failed to lock pipe mutex")
-#define UI_UNLOCK_PIPE(_status) \
-	AUG_DB_UNLOCK(&g.pipe_mtx, _status, "failed to unlock pipe mutex")
 
 void ui_lock() {
 	int status;
