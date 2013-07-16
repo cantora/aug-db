@@ -87,7 +87,7 @@ int ui_init() {
 
 	if(pthread_create(&g.tid, NULL, ui_t_run, NULL) != 0)
 		goto cleanup_window;
-	while(g.waiting == 0)
+	while(g.waiting == 0) /* TODO: use the lock here for good measure */
 		util_usleep(0, 10000);
 
 	return 0;
@@ -196,8 +196,8 @@ int ui_on_input(const uint32_t *ch) {
 		return -1;
 	}
 	fifo_push(&g.input_pipe, ch);
-	wakeup_ui_thread(NULL);	
 	UI_UNLOCK_PIPE(status);
+	wakeup_ui_thread(NULL);	
 
 	/*aug_log("ui_on_input: successfully pushed input\n");*/
 	return 0;
@@ -311,8 +311,8 @@ static void act_on_state(int *interact_off, int *do_render) {
 	} /* switch(ui state) */
 }
 
-/* mtx is locked upon entry to this function.
- * this function should return with mtx locked.
+/* mtx is unlocked upon entry to this function.
+ * this function should return with mtx unlocked.
  */
 static void interact() {
 	int status, amt, do_render, brk;
@@ -324,29 +324,39 @@ static void interact() {
 	}
 
 	do_render = 1;
-	g.waiting = 0;
+	/*g.waiting = 0; shouldnt need this, ui_t_run already sets this to 0 */
 	brk = 0;
 	while(1) {
+		UI_LOCK(status);
 		if(g.sig_cmd_key != 0 || g.shutdown != 0) {
 			clr_sig_cmd_key();
-			/* leave mtx locked */
-			break;
+			UI_UNLOCK(status);
+			break; 
 		}
+
+		/* both branches unlock g.mtx */
 		if(g.sig_dims_changed != 0) {
 			clr_sig_dims_changed();
+			UI_UNLOCK(status);
+
 			window_end();
 			ui_state_dims_changed();
 			if(window_start() != 0) {
 				aug_log(WINDOW_TOO_SMALL_MSG);
-				goto refresh;
+				/* UI should be unlocked at refresh, so leave lock state as is */
+				goto refresh; 
 			}
 			do_render = 1;
 		}
-		UI_UNLOCK(status);
+		else {
+			UI_UNLOCK(status);
+		}
 
 		while(fifo_amt(&g.input_pipe) > 0) {
 			UI_LOCK_PIPE(status);
 			aug_log("consume input\n");
+			/* no aug API calls in this function, so we shouldnt be in danger of 
+			 * circular dependencies */
 			amt = ui_state_consume(&g.input_pipe);
 			UI_UNLOCK_PIPE(status);
 
@@ -355,31 +365,41 @@ static void interact() {
 			aug_log("act on state\n");
 			act_on_state(&brk, &amt);
 			if(brk != 0)
-				break;
+				break; /* breaking here leaves g.mtx unlocked */
 			if(amt > 0) {
-				if(render() != 0)
-					goto refresh;  /* window_end() was called by render() */
+				if(render() != 0) {
+					/* jumps to the end of the function leaving g.mtx unlocked */
+					goto refresh;  /* window_end() was called by render() so we can skip it */
+				}
 				do_render = 0;
 			}
 		} /* while(data in fifo) */
 		
 		if(do_render) {
-			if(render() != 0) 
+			if(render() != 0) {
+				/* jumps to the end of the function leaving g.mtx unlocked */
 				goto refresh;  /* window_end() was called by render() */
+			}
 			do_render = 0;
 		}
 
-		UI_LOCK(status);
 		if(brk != 0)
-			break;
-		if(fifo_amt(&g.input_pipe) > 0)
+			break; /* breaking here leaves g.mtx unlocked */
+
+		UI_LOCK_PIPE(status);
+		if(fifo_amt(&g.input_pipe) > 0) {
+			UI_UNLOCK_PIPE(status);
 			continue;
+		}
+		UI_UNLOCK_PIPE(status);
 
 		/*aug_log("interact: wait\n");*/
+		UI_LOCK(status);
 		g.waiting = 1;
 		if( (status = pthread_cond_wait(&g.wakeup, &g.mtx)) != 0)
 			err_panic(status, "error in condition wait");
 		g.waiting = 0;
+		UI_UNLOCK(status);
 		/*aug_log("interact: wokeup\n");*/
 	} /* while(1) */
 	ui_state_interact_end();
@@ -406,7 +426,9 @@ static void *ui_t_run(void *user) {
 			break;
 		else if(g.sig_cmd_key != 0) {
 			clr_sig_cmd_key();
+			UI_UNLOCK(status);
 			interact();
+			UI_LOCK(status);
 			/* shut down might be signaled during interaction */
 			if(g.shutdown != 0)
 				break;	

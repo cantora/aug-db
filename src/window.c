@@ -1,3 +1,20 @@
+/* 
+ * Copyright 2013 anthony cantor
+ * This file is part of aug-db.
+ *
+ * aug-db is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * aug-db is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with aug-db.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #include "window.h"
 
 #include "err.h"
@@ -22,13 +39,13 @@ int window_init() {
 		err_warn(status, "failed to init mutex");
 		return -1;
 	}
+	g.off = 1;
 	window_reset_vars();
 
 	return 0;
 }
 
 static void window_reset_vars() {
-	g.off = 1;
 	g.panel = NULL;
 	g.win = NULL;
 }
@@ -43,7 +60,8 @@ void window_free() {
 	AUG_DB_LOCK(&g.mtx, _status, "failed to lock window")
 #define WINDOW_UNLOCK(_status) \
 	AUG_DB_UNLOCK(&g.mtx, _status, "failed to unlock window")
-	
+
+/* returns true if the window is currently not visible */	
 int window_off() {
 	int result, status;
 
@@ -59,11 +77,14 @@ int window_start() {
 	int status, rows, cols;
 
 	aug_log("window_start\n");
-	WINDOW_LOCK(status);
+	WINDOW_LOCK(status); 
 	err_assert(g.off != 0);
+	WINDOW_UNLOCK(status);
 
 	aug_screen_panel_alloc(0, 0, 0, 0, &g.panel);
+	aug_log("allocated panel\n");
 	aug_lock_screen();
+	aug_log("locked screen\n");
 	if( (win = panel_window(g.panel)) == NULL) 
 		err_panic(0, "could not get window from panel\n");
 	
@@ -102,9 +123,11 @@ int window_start() {
 	 * manually */
 	if(keypad(stdscr, 1) == ERR)
 		err_panic(0, "failed to enable keypad");
-	
-	aug_unlock_screen();
 
+	aug_unlock_screen();
+	aug_log("unlocked screen\n");
+
+	WINDOW_LOCK(status);
 	g.off = 0;
 	WINDOW_UNLOCK(status);
 
@@ -117,6 +140,7 @@ void window_end() {
 	aug_log("window_end\n");
 	WINDOW_LOCK(status);
 	err_assert(g.off == 0);
+	WINDOW_UNLOCK(status);
 
 	aug_lock_screen();
 	if(keypad(stdscr, 0) == ERR)
@@ -131,7 +155,10 @@ void window_end() {
 	aug_unlock_screen();
 
 	aug_screen_panel_dealloc(g.panel);
+
 	window_reset_vars();
+	WINDOW_LOCK(status);
+	g.off = 1;
 	WINDOW_UNLOCK(status);
 }
 
