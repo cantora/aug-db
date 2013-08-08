@@ -32,12 +32,7 @@ static void on_cmd_key(uint32_t, void *);
 static void on_input(uint32_t *, aug_action *, void *);
 static void on_dims_change(int, int, void *);
 
-struct aug_plugin_cb g_callbacks = {
-	.input_char = on_input,
-	.cell_update = NULL,
-	.cursor_move = NULL,
-	.screen_dims_change = on_dims_change
-};
+struct aug_plugin_cb g_callbacks;
 
 static uint32_t g_cmd_ch;
 static int g_freed;
@@ -53,7 +48,9 @@ int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
 	aug_log("init\n");
 
 	g_freed = 0;
-	g_callbacks.user = NULL;
+	aug_callbacks_init(&g_callbacks);
+	g_callbacks.input_char = on_input;
+	g_callbacks.screen_dims_change = on_dims_change;
 
 	if(aug_conf_val(aug_plugin_name, "db", &dbpath) == 0) {
 		aug_log("db file: %s\n", dbpath);
