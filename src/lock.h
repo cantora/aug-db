@@ -19,7 +19,7 @@
 #define AUG_DB_LOCK_H
 
 #include <pthread.h>
-#include "api_calls.h"
+#include "aug_api.h"
 
 static inline int fprint_tid(const char *src, const char *func, int lineno, 
 		pthread_t pt, const char *suffix, ...) {

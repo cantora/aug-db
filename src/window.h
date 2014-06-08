@@ -18,7 +18,7 @@
 #ifndef AUG_DB_WINDOW_H
 #define AUG_DB_WINDOW_H
 
-#include "api_calls.h"
+#include "aug_api.h"
 /* these expect to be called by the main thread */
 int window_init();
 void window_free();

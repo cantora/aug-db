@@ -16,20 +16,16 @@
  * along with aug-db.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "aug_plugin.h"
-
 #include "err.h"
 #include "ui.h"
 #include "db.h"
 #include "util.h"
-
 #include <strings.h>
-
-#include "api_calls.h"
 
 const char aug_plugin_name[] = "aug-db";
 
 static void on_cmd_key(uint32_t, void *);
-static void on_input(uint32_t *, aug_action *, void *);
+static void on_input(uint32_t *, aug_action *action, struct aug_inject *, void *);
 static void on_dims_change(int, int, void *);
 
 struct aug_plugin_cb g_callbacks;
@@ -37,15 +33,12 @@ struct aug_plugin_cb g_callbacks;
 static uint32_t g_cmd_ch;
 static int g_freed;
 
-int aug_plugin_init(struct aug_plugin *plugin, const struct aug_api *api) {
+int aug_plugin_start() {
 	const char *key, *dbpath;
 	const char default_key[] = "^R";
 	wordexp_t exp;
 
-	G_plugin = plugin;	
-	G_api = api;
-
-	aug_log("init\n");
+	aug_log("start\n");
 
 	g_freed = 0;
 	aug_callbacks_init(&g_callbacks);
@@ -120,9 +113,10 @@ static void on_cmd_key(uint32_t ch, void *user) {
 	ui_on_cmd_key();
 }
 
-static void on_input(uint32_t *ch, aug_action *action, void *user) {
+static void on_input(uint32_t *ch, aug_action *action, struct aug_inject *inject, void *user) {
 	int status;
 	(void)(action);
+	(void)(inject);
 	(void)(user);
 
 	if( (status = ui_on_input(ch)) < 0)
